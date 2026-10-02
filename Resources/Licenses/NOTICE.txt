@@ -1,0 +1,7 @@
+Lecture Lens uses sherpa-onnx 1.13.8 (Apache-2.0) and ONNX Runtime (MIT).
+NVIDIA Nemotron Speech Streaming English 0.6B, converted to int8 ONNX by sherpa-onnx.
+Licensed by NVIDIA Corporation under the NVIDIA Open Model License.
+The complete model agreement accompanies this bundle as NVIDIA-MODEL-LICENSE.txt.
+Runtime source: https://github.com/k2-fsa/sherpa-onnx/releases/tag/v1.13.8
+Model source: https://k2-fsa.github.io/sherpa/onnx/nemo/nemotron-streaming.html
+No user audio is transmitted to these publishers.

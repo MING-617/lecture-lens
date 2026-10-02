@@ -1,0 +1,4 @@
+# 以下三条来自本次已核对课件；列顺序：英文、中文、解释、课程章节、出处
+Stepper	步进变量	按规则依次取值的变量，例如每次增加 1 或 2。	4039 Programming · Week 2	课件核对：Wk02_01_PatternsAndUserDefinedDataTypes.pdf · PDF 第 15 页
+counter	计数器	本节将每次加 1 的计数器视为 Stepper 的特殊情况。	4039 Programming · Week 2	课件核对：Wk02_01_PatternsAndUserDefinedDataTypes.pdf · PDF 第 15 页
+Most Wanted Holder	最优值保存变量	保存截至目前找到的最佳值或位置。	4039 Programming · Week 2	课件核对：Wk02_01_PatternsAndUserDefinedDataTypes.pdf · PDF 第 15 页

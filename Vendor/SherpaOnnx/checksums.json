@@ -1,0 +1,8 @@
+{
+  "version": "1.13.8",
+  "files": {
+    "libonnxruntime.dylib": "3567d114f7299d559993e536d605a6f46d7bc9d2542004accc80ee9bf5457f0b",
+    "libsherpa-onnx-c-api.dylib": "ae729669633008692c670d4e4c942db7ea5bdc38abc2f479516062d48849e9d1"
+  },
+  "header_sha256": "2a1b95084be8fd1deb3228fcad2fd3f7f0258b64582f7402281ec174c7b7f4ce"
+}
