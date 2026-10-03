@@ -1,0 +1,2 @@
+# Unified patches keep the required context marker on blank lines.
+Vendor/SherpaOnnx/*.patch whitespace=-blank-at-eol

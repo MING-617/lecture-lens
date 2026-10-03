@@ -18,6 +18,10 @@ enum Benchmark {
         let maximumProcessingSeconds: Double
         let transcript: String
         let errors: [String]
+        let enhancementActive: Bool
+        let firstDisplayMaximumSeconds: Double
+        let correctionMaximumSeconds: Double
+        let correctionCount: Int
     }
     @MainActor static func run(arguments: [String]) async -> Int32 {
         func option(_ name: String) -> String? {
@@ -28,6 +32,13 @@ enum Benchmark {
         }
         let session = SpeechSession()
         if let model = option("--model") { session.modelDirectory = URL(fileURLWithPath: model) }
+        var vocabulary: [String] = []
+        if arguments.contains("--enhance"), let pack = option("--terms").map({ URL(fileURLWithPath: $0) }) ?? Bundle.main.url(forResource: "coursepack", withExtension: "json"),
+           let data = try? Data(contentsOf: pack), let decoded = try? JSONDecoder().decode(CoursePack.self, from: data) { vocabulary = decoded.terms.map(\.english) }
+        session.enhancementPaths = Int(option("--paths") ?? "2") ?? 2
+        session.enhancementScore = Float(option("--score") ?? "0.5") ?? 0.5
+        var enhanced = false
+        session.onEnhancement = { active, _ in enhanced = active }
         var events: [RecognitionEvent] = [], errors: [String] = []
         var tracker = StreamingLatencyTracker()
         var queueWait = 0.0, processing = 0.0
@@ -37,18 +48,19 @@ enum Benchmark {
         session.onPerformance = { wait, time in queueWait = max(queueWait, wait); processing = max(processing, time) }
         let start = ProcessInfo.processInfo.systemUptime
         do {
-            try await session.streamFile(url: URL(fileURLWithPath: input), localeID: "en", contextualTerms: [])
+            try await session.streamFile(url: URL(fileURLWithPath: input), localeID: "en", contextualTerms: vocabulary)
             await session.finish()
         } catch { errors.append(error.localizedDescription); await session.cancel() }
         let samples = tracker.samples.sorted()
         func percentile(_ p: Double) -> Double { samples.isEmpty ? 0 : samples[min(samples.count - 1, Int(Double(samples.count - 1) * p))] }
         let report = Report(version: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "development",
-                            engine: "Nemotron English 0.6B 560ms int8 / sherpa-onnx 1.13.8 / CPU 2 threads / greedy causal decoding", input: input,
-                            measurement: "Native subword emission timestamp + 80ms (approximate word end) to first full spelling in provisional text, counted once its next word arrives. No waiting for final paragraph correction. All samples, including >3s, remain uncapped. Token timestamps are estimates, not independent ground truth. Includes real-time pacing, conversion, worker queue, decoding and main-thread result dispatch. Excludes room acoustics, omitted words and compositor paint. Full events preserved for audit.",
-                            events: events, sampleCount: samples.count, maximumSeconds: tracker.maximum,
+                            engine: "Nemotron English 0.6B 560ms int8 / sherpa-onnx 3df7ada + bounded revisions / CPU 2 threads / \(enhanced ? "native hotwords" : "greedy decoding")", input: input,
+                            measurement: "Native subword emission timestamp + 80ms (approximate word end) to first appearance and each changed lexical spelling, counted once its next word arrives. Correctness requires separate reference-text alignment; a revised spelling is not automatically correct. Equivalent formatting and timestamp realignment preserve prior appearance time. All lexical samples, including >3s, remain uncapped. Token timestamps are estimates, not independent ground truth. Includes real-time pacing, conversion, worker queue, decoding and main-thread result dispatch. Excludes room acoustics, omitted words and compositor paint. Full events preserved for audit.",
+                            events: events, sampleCount: tracker.sampleCount, maximumSeconds: tracker.maximum,
                             p50Seconds: percentile(0.5), p95Seconds: percentile(0.95), overTwoSeconds: tracker.overTwo, overThreeSeconds: tracker.overLimit,
                             durationSeconds: ProcessInfo.processInfo.systemUptime - start, maximumQueueWaitSeconds: queueWait, maximumProcessingSeconds: processing,
-                            transcript: events.last?.text ?? "", errors: errors)
+                            transcript: events.last?.text ?? "", errors: errors, enhancementActive: enhanced,
+                            firstDisplayMaximumSeconds: tracker.firstDisplayMaximum, correctionMaximumSeconds: tracker.correctionMaximum, correctionCount: tracker.corrections)
         do {
             let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             try encoder.encode(report).write(to: URL(fileURLWithPath: output), options: .atomic)

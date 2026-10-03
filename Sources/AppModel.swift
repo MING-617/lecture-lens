@@ -23,6 +23,10 @@ import CoreAudio
     @Published var fontSize = 30.0
     @Published var chineseHints = true
     @Published var floatWindow = false
+    @Published var compact = false
+    @Published var enhanceTerms = true
+    @Published var enhancementActive = false
+    @Published var enhancementNotice: String?
     @Published var terms: [Term] = []
     @Published var courseInfo: [CourseInfo] = []
     @Published var known: Set<String> = []
@@ -48,19 +52,18 @@ import CoreAudio
     private var lastMeterPublish = 0.0
     private var currentAudioEnd = 0.0
     private var hintCache: (text: String, context: String, values: [Term])?
-    private var preferenceURL: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("LectureLens/preferences.json")
-    }
-    private struct Preferences: Codable { var terms: [Term]; var known: Set<String>; var version: Int? = 4 }
+    private let preferenceURL: URL
+    private struct Preferences: Codable { var terms: [Term]; var known: Set<String>; var version: Int? = 5; var enhanceTerms: Bool? = nil }
 
-    init(transcriptDirectory: URL? = nil, makeSession: @escaping @MainActor () -> SpeechSession = { SpeechSession() }) {
+    init(transcriptDirectory: URL? = nil, preferenceURL: URL? = nil, makeSession: @escaping @MainActor () -> SpeechSession = { SpeechSession() }) {
+        self.preferenceURL = preferenceURL ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("LectureLens/preferences.json")
         self.transcriptDirectory = transcriptDirectory ?? FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("Lecture Lens 字幕", isDirectory: true)
         self.makeSession = makeSession
         if let url = Bundle.main.url(forResource: "coursepack", withExtension: "json"),
            let data = try? Data(contentsOf: url), let pack = try? JSONDecoder().decode(CoursePack.self, from: data) {
             terms = pack.terms; courseInfo = pack.courses
         }
-        if let data = try? Data(contentsOf: preferenceURL), let value = try? JSONDecoder().decode(Preferences.self, from: data) {
+        if let data = try? Data(contentsOf: self.preferenceURL), let value = try? JSONDecoder().decode(Preferences.self, from: data) {
             // Preserve user edits/imports while hiding exact old demonstration entries.
             let saved = value.terms.filter { term in
                 !(term.source ?? "").hasPrefix("课件核对：") &&
@@ -68,6 +71,7 @@ import CoreAudio
             }
             for term in saved { terms.removeAll { $0.id == term.id }; terms.append(term) }
             known = value.known
+            enhanceTerms = value.enhanceTerms ?? true
         }
     }
     var hasActiveSession: Bool { running || preparing || stopping }
@@ -89,6 +93,8 @@ import CoreAudio
         if !hasActiveSession, device != 0, !devices.contains(where: { $0.id == device }) { device = InputDevice.recommended() }
     }
     var displayed: [Caption] { frozen ?? history.captions }
+    func toggleCompact() { compact.toggle(); if compact { frozen = nil } }
+    func setEnhancement(_ value: Bool) { guard !hasActiveSession else { return }; enhanceTerms = value; savePreferences() }
     var suggestions: [Term] {
         guard chineseHints else { return [] }
         let recent = displayed.filter { !running || frozen != nil || $0.end >= currentAudioEnd - 15 }
@@ -109,8 +115,20 @@ import CoreAudio
         stalled = false; error = nil; preparing = true; saveFailed = false
         currentAudioEnd = 0; hintCache = nil; lastEvent = nil; health = CaptureHealth(); archive = nil
         lastMeterPublish = 0; savedURL = nil
+        enhancementActive = false; enhancementNotice = nil
         status = "正在准备麦克风和本地字幕文件…"
         let session = makeSession(); self.session = session
+        let vocabulary = enhanceTerms ? RecognitionVocabulary.phrases(terms.map(\.english)) : []
+        if enhanceTerms && vocabulary.isEmpty { enhancementNotice = "未找到可用的专业词表，正在使用普通英文识别。" }
+        if let settings = Bundle.main.url(forResource: "recognition-settings", withExtension: "json"),
+           let data = try? Data(contentsOf: settings), let value = try? JSONDecoder().decode(EnhancementSettings.self, from: data) {
+            session.enhancementPaths = value.paths; session.enhancementScore = value.score
+        }
+        session.onEnhancement = { [weak self] active, note in
+            guard let self, self.generation == token else { return }
+            self.enhancementActive = active
+            if let note { self.enhancementNotice = note }
+        }
         session.onStatus = { [weak self] message in guard let self, self.generation == token, !self.stopping else { return }; self.status = message }
         session.onResult = { [weak self] event in
             guard let self, self.generation == token, self.session != nil else { return }
@@ -148,7 +166,7 @@ import CoreAudio
                         self.saveFailed = true; self.error = "字幕自动保存失败：" + error.localizedDescription
                     }
                 }
-                try await session.startMicrophone(device: device, localeID: locale, contextualTerms: [])
+                try await session.startMicrophone(device: device, localeID: locale, contextualTerms: vocabulary)
                 try Task.checkCancellation(); guard generation == token else { throw CancellationError() }
                 preparing = false; running = true; health.audio(speech: false, at: ProcessInfo.processInfo.systemUptime); status = "正在听 · 等待老师讲话"
                 watchdog = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
@@ -272,8 +290,10 @@ import CoreAudio
         do {
             try FileManager.default.createDirectory(at: preferenceURL.deletingLastPathComponent(), withIntermediateDirectories: true)
             let custom = terms.filter { !($0.source ?? "").hasPrefix("课件核对：") }
-            let data = try JSONEncoder().encode(Preferences(terms: custom, known: known))
+            let data = try JSONEncoder().encode(Preferences(terms: custom, known: known, enhanceTerms: enhanceTerms))
             try data.write(to: preferenceURL, options: .atomic)
         } catch { self.error = "无法保存术语设置：\(error.localizedDescription)" }
     }
 }
+
+struct EnhancementSettings: Codable { var paths: Int; var score: Float }

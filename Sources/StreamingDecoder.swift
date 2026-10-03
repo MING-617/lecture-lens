@@ -5,12 +5,9 @@ final class StreamingDecoder {
     let recognizer: OpaquePointer
     let stream: OpaquePointer
     private var strings: [UnsafeMutablePointer<CChar>] = []
-    private var processedTokens = 0
-    private var completedWords: [WordStamp] = []
-    private var currentWord = ""
-    private var wordStart = 0.0
-    private var wordEnd = 0.0
-    init(model: String) throws {
+    private var parser = StreamingWords()
+    let enhanced: Bool
+    init(model: String, contextualTerms: [String] = [], paths: Int = 2, score: Float = 1) throws {
         var pool: [UnsafeMutablePointer<CChar>] = []
         var retained = false
         defer { if !retained { for p in pool { free(p) } } }
@@ -22,13 +19,39 @@ final class StreamingDecoder {
         config.model_config.transducer.joiner = c(model + "/joiner.int8.onnx")
         config.model_config.tokens = c(model + "/tokens.txt")
         config.model_config.num_threads = 2; config.model_config.provider = c("cpu")
-        config.decoding_method = c("greedy_search"); config.max_active_paths = 4
+        let phrases = RecognitionVocabulary.phrases(contextualTerms)
+        let vocabulary = model + "/bpe.vocab"
+        enhanced = !phrases.isEmpty && Self.validVocabulary(vocabulary, tokens: model + "/tokens.txt")
+        config.decoding_method = c(enhanced ? "modified_beam_search" : "greedy_search")
+        config.max_active_paths = Int32(paths == 4 ? 4 : 2)
+        if enhanced {
+            config.model_config.modeling_unit = c("bpe"); config.model_config.bpe_vocab = c(vocabulary)
+            let variants = Set(phrases.flatMap { [$0, $0.lowercased()] }).sorted()
+            let hotwords = variants.joined(separator: "\n")
+            config.hotwords_buf = c(hotwords); config.hotwords_buf_size = Int32(hotwords.utf8.count)
+            config.hotwords_score = score.isFinite && score >= 0 && score <= 2 ? score : 1
+        }
         config.enable_endpoint = 0; config.rule1_min_trailing_silence = 2.4
         config.rule2_min_trailing_silence = 0.8; config.rule3_min_utterance_length = 20
         guard let r = SherpaOnnxCreateOnlineRecognizer(&config) else { throw NSError(domain: "model", code: 1) }
         recognizer = r
         guard let s = SherpaOnnxCreateOnlineStream(r) else { SherpaOnnxDestroyOnlineRecognizer(r); throw NSError(domain: "stream", code: 1) }
         stream = s; strings = pool; retained = true
+    }
+    private static func validVocabulary(_ path: String, tokens: String) -> Bool {
+        guard let text = try? String(contentsOfFile: path, encoding: .utf8),
+              let table = try? String(contentsOfFile: tokens, encoding: .utf8) else { return false }
+        // This vocabulary is derived from the pinned model's token table.
+        // Validate the exact derivation before entering native code: a damaged
+        // optional vocabulary must fall back rather than abort the process.
+        let lines = table.split(separator: "\n")
+        guard lines.count > 100, lines.count < 100000 else { return false }
+        var expected = ""
+        for line in lines {
+            guard let space = line.lastIndex(of: " "), Int(line[line.index(after: space)...]) != nil else { return false }
+            expected += line[..<space] + "\t-1.0\n"
+        }
+        return text == expected
     }
     deinit { SherpaOnnxDestroyOnlineStream(stream); SherpaOnnxDestroyOnlineRecognizer(recognizer); for p in strings { free(p) } }
     @discardableResult func feed(_ samples: [Float]) -> Bool {
@@ -37,33 +60,21 @@ final class StreamingDecoder {
         while SherpaOnnxIsOnlineStreamReady(recognizer, stream) != 0 { SherpaOnnxDecodeOnlineStream(recognizer, stream); decoded = true }
         return decoded
     }
-    func result() -> (String, [WordStamp], Double) {
+    func result() -> (String, [WordStamp], Int) {
         guard let raw = SherpaOnnxGetOnlineStreamResult(recognizer, stream) else { return ("", [], 0) }
         defer { SherpaOnnxDestroyOnlineRecognizerResult(raw) }
         let r = raw.pointee
         let text = String(cString: r.text)
-        // Endpoint resets are disabled, so native timestamps remain relative
-        // to the one stream. Process only new tokens, not two hours of JSON.
-        let offset = 0.0
+        var pieces: [TokenPiece] = []
         if let tokens = r.tokens_arr, let times = r.timestamps {
-            for i in processedTokens..<Int(r.count) {
+            pieces.reserveCapacity(Int(r.count))
+            for i in 0..<Int(r.count) {
                 guard let token = tokens[i] else { continue }
-                let piece = String(cString: token).replacingOccurrences(of: "▁", with: " ")
-                let time = offset + Double(times[i])
-                if piece.first?.isWhitespace == true && !currentWord.isEmpty {
-                    completedWords.append(WordStamp(text: currentWord, start: wordStart, end: wordEnd)); currentWord = ""
-                }
-                if currentWord.isEmpty { wordStart = time; wordEnd = time + 0.08 }
-                currentWord += piece.trimmingCharacters(in: .whitespaces)
-                // A full stop emitted during later silence does not move the
-                // spoken word's estimated end to that punctuation timestamp.
-                if piece.contains(where: { $0.isLetter || $0.isNumber }) { wordEnd = time + 0.08 }
+                pieces.append(TokenPiece(text: String(cString: token), time: Double(times[i])))
             }
-            processedTokens = Int(r.count)
         }
-        var words = completedWords
-        if !currentWord.isEmpty { words.append(WordStamp(text: currentWord, start: wordStart, end: wordEnd)) }
-        return (text, words, offset)
+        let (words, changed) = parser.accept(pieces)
+        return (text, words, changed)
     }
     func finish() {
         feed(Array(repeating: 0, count: 16000))

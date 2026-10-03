@@ -1,0 +1,102 @@
+{
+  "method": "Each reference term must map completely and contiguously into the final production-paced hypothesis. Fixed generated six-course all-terms input; strict lexical spelling. Term word errors count reference substitutions/deletions; extra words within a phrase fail the phrase check.",
+  "phraseOccurrences": 321,
+  "results": {
+    "enhanced_0.5.0": {
+      "errorTerms": [
+        "behaviour",
+        "modelling",
+        "readline",
+        "codeword",
+        "WAN",
+        "SLA",
+        "IaaS",
+        "PaaS",
+        "SaaS"
+      ],
+      "exactPhraseErrors": 9,
+      "perCourse": {
+        "4039": {
+          "exactPhraseErrors": 3,
+          "phrases": 72,
+          "termWordErrors": 3
+        },
+        "4043": {
+          "exactPhraseErrors": 2,
+          "phrases": 78,
+          "termWordErrors": 2
+        },
+        "5018P": {
+          "exactPhraseErrors": 0,
+          "phrases": 34,
+          "termWordErrors": 0
+        },
+        "5059": {
+          "exactPhraseErrors": 0,
+          "phrases": 92,
+          "termWordErrors": 0
+        },
+        "5076": {
+          "exactPhraseErrors": 0,
+          "phrases": 21,
+          "termWordErrors": 0
+        },
+        "5077": {
+          "exactPhraseErrors": 4,
+          "phrases": 24,
+          "termWordErrors": 4
+        }
+      },
+      "termWordErrors": 9
+    },
+    "installed_0.4.0": {
+      "errorTerms": [
+        "behaviour",
+        "modelling",
+        "readline",
+        "analogue",
+        "codeword",
+        "WAN",
+        "superkey",
+        "SLA",
+        "IaaS",
+        "PaaS",
+        "SaaS"
+      ],
+      "exactPhraseErrors": 11,
+      "perCourse": {
+        "4039": {
+          "exactPhraseErrors": 3,
+          "phrases": 72,
+          "termWordErrors": 3
+        },
+        "4043": {
+          "exactPhraseErrors": 3,
+          "phrases": 78,
+          "termWordErrors": 3
+        },
+        "5018P": {
+          "exactPhraseErrors": 0,
+          "phrases": 34,
+          "termWordErrors": 0
+        },
+        "5059": {
+          "exactPhraseErrors": 0,
+          "phrases": 92,
+          "termWordErrors": 0
+        },
+        "5076": {
+          "exactPhraseErrors": 1,
+          "phrases": 21,
+          "termWordErrors": 1
+        },
+        "5077": {
+          "exactPhraseErrors": 4,
+          "phrases": 24,
+          "termWordErrors": 4
+        }
+      },
+      "termWordErrors": 11
+    }
+  }
+}

@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Restore pinned models and native libraries from official GitHub releases."""
+"""Restore pinned models and build the pinned upstream native runtime."""
 import argparse
 import hashlib
 import json
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tarfile
 
 
@@ -78,12 +79,17 @@ def main():
     target_runtime = args.destination / "Vendor/SherpaOnnx"
     restore_archive(model["model_source"], args.cache / "nemotron-model.tar.bz2", model["model_archive_sha256"], target_model,
                     {name: checksum for name, checksum in model["files"].items() if name != "silero_vad.onnx"})
-    restore_archive(model["runtime_source"], args.cache / "sherpa-lib.tar.bz2", model["runtime_archive_sha256"], target_runtime, runtime["files"])
+    if not matches(target_runtime / "c-api.h", runtime["header_sha256"]) or not all(matches(target_runtime / name, checksum) for name, checksum in runtime["files"].items()):
+        subprocess.run([sys.executable, str(repository / "Scripts/build-native.py"), "--destination", str(args.destination.resolve()), "--cache", str((args.cache / "native").resolve())], check=True)
     target_model.mkdir(parents=True, exist_ok=True)
     download(model["vad"]["source"], target_model / "silero_vad.onnx", model["vad"]["sha256"])
-    if digest(repository / "Vendor/SherpaOnnx/c-api.h") != runtime["header_sha256"]:
+    if digest(target_runtime / "c-api.h") != runtime["header_sha256"]:
         raise ValueError("The checked-in C API header does not match this runtime")
-    print("All dependency checksums verified.")
+    vocabulary = "".join(line.rsplit(" ", 1)[0] + "\t-1.0\n" for line in (target_model / "tokens.txt").read_text().splitlines())
+    (target_model / "bpe.vocab").write_text(vocabulary)
+    if digest(target_model / "bpe.vocab") != model["bpe_vocab_sha256"]:
+        raise ValueError("BPE vocabulary checksum mismatch")
+    print("All dependency sources and model checksums verified.")
 
 
 if __name__ == "__main__":

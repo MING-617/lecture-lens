@@ -2,7 +2,7 @@
 
 原生 macOS 英文实时字幕软件。用于线下听英文课：直接点击“开始”，看英文字幕；遇到已有词表中的专业词时，自动提示中文释义和课件出处。无需选择课程或章节。
 
-当前版本：**0.4.0 / build 7**。英文识别使用 Nemotron English 0.6B 560ms int8 和 sherpa-onnx 1.13.8，全部在本机处理，无需 API key。Silero VAD 只用于收音状态提示，不裁掉识别音频。
+当前版本：**0.5.0 / build 8**。英文识别使用 Nemotron English 0.6B 560ms int8 和固定的 sherpa-onnx 源码提交 `3df7ada`，全部在本机处理，无需 API key。Silero VAD 只用于收音状态提示，不裁掉识别音频。
 
 ## 使用
 
@@ -10,6 +10,8 @@
 - 完整英文字幕自动保存到 `~/Documents/Lecture Lens 字幕/`，每次开始创建新文件。不保存音频录音。
 - 画面最多保留最近 300 行；“字幕文件”定位完整文件，“导出字幕”另存本次全文。
 - “回看”冻结画面，后台继续听；“回到实时”追赶最新字幕。字号可调整，“窗口置顶”方便同时看课件。
+- “悬浮字幕”切换为约 560×240 的小窗，显示最新英文和简短术语提示，自动置顶。顶部空白区域可拖动，边缘可缩放。“返回主界面”恢复之前的窗口尺寸和置顶设置，整个过程共用收音和字幕文件。
+- “专业词增强”默认开启，自动使用六门课词表及自备英文词条，无需选课。开关在“术语表”中，停止后才能调整，下次开始生效。关闭中文或标记词条已掌握不会关闭英文识别增强。增强资源失败时显示提示并使用普通识别。
 - `⌘R` 开始／请求停止，`⌘空格` 回看／回到实时。首次使用需手动允许麦克风权限。
 - 输入中断、设备配置变化、系统睡眠或音频积压会停止并保留已收到的字幕。检查后手动重新开始。
 
@@ -24,7 +26,11 @@ python3 Scripts/fetch-dependencies.py
 ./build.sh --install
 ```
 
-首次恢复会从官方 GitHub 发布下载约数百 MB 的模型和原生运行库。版本、下载包 SHA-256 和文件 SHA-256 固定在 `Resources/StreamingEnglish/model-manifest.json` 与 `Vendor/SherpaOnnx/checksums.json`；每次下载与恢复都会校验。依赖及缓存不提交到 Git。第三方许可证保存在 `Resources/Licenses/`。
+首次恢复会下载约数百 MB 的模型，并在本机构建原生运行库。上游源码固定为 [NeMo 热词支持提交](https://github.com/k2-fsa/sherpa-onnx/commit/3df7adacc0d5f140e4e81b746dac0fbeeac16fab)，模型、源码下载包和修订补丁的 SHA-256 固定在 `Resources/StreamingEnglish/model-manifest.json` 与 `Vendor/SherpaOnnx/checksums.json`。构建工具 CMake 固定为 3.31.6，仅安装在任务缓存；运行库使用上游锁定的 ONNX Runtime 1.28.2。
+
+`Vendor/SherpaOnnx/bounded-revisions.patch` 在连续解码中约束较早词片的改写，修订窗口为 1.6 秒；模型不会按段重置，延迟读数也不会截断。这能避免很久之后反复改写，但已经固定的早期误听也可能保留。增强默认使用两条路径、权重 0.5，配置在 `Resources/recognition-settings.json`。
+
+下载和恢复会检查源码／模型／补丁及头文件校验和；每个本地构建另存二进制校验收据。运行库的参考二进制哈希来自此设备，其他构建位置生成的 Mach-O 哈希可能不同。依赖及缓存不提交到 Git。第三方许可证保存在 `Resources/Licenses/`。
 
 构建结果默认位于仓库上一级的 `Lecture Lens.zip`。可通过 `LECTURELENS_ARCHIVE` 指定其他 zip 路径。当前是本机临时签名的个人应用，未经过 Apple 公证；更新签名后 macOS 可能再次请求麦克风授权。
 
@@ -46,6 +52,20 @@ LECTURELENS_MOODLE_DIR='/path/to/Moodle课程资料' ./build.sh
 ./Scripts/test.sh
 ```
 
-此命令检查术语匹配、延迟统计、会话停止和保存、旧回调隔离及输入积压保护。测试启用 Swift 断言，生成的文字留在被忽略的 `.cache/tests/`。
+此命令检查术语匹配、首次及修订延迟、拆词／合词／增删词、保存和导出同步、会话停止、旧回调隔离、普通及增强输入积压保护，以及增强词表损坏时的降级。测试启用 Swift 断言，生成的文字留在被忽略的 `.cache/tests/`。
+
+词汇对比测试使用自写句子和 macOS 合成语音，包含独立句子、全词表、普通词、15dB 噪声、长停顿和纯静音；音频和原始事件报告留在本地缓存：
+
+```sh
+python3 Scripts/validate-vocabulary.py
+# 按真实语速走应用生产路径，例如：
+'/Applications/Lecture Lens.app/Contents/MacOS/LectureLens' --benchmark \
+  --input .cache/vocabulary-validation/holdout.wav --enhance \
+  --report .cache/vocabulary-validation/paced-holdout.json
+python3 Scripts/vocabulary-metrics.py Tests/Fixtures/caption-corpus/holdout.txt \
+  .cache/vocabulary-validation/paced-holdout.json
+```
+
+快速参数测试的模拟时序不作为真实输入延迟的证明。对照文本检查遗漏和误词；正确拼写的延迟单独计算，不能用先出现的错误字幕替代。0.5.0 的验收记录见 [新版验证记录](docs/VALIDATION-0.5.md)。
 
 历史验证包括两小时实时节奏输入和实际扬声器到麦克风测试，见 [验证记录](docs/VALIDATION.md)。目标是持续跟上并控制在 2–3 秒以内；测得延迟基于模型词片时间戳估计，遗漏词不计入，未测量屏幕绘制。真实教室后排、回声、老师口音和多人讲话仍需现场检查，不能保证所有单词正确或每个词都在 3 秒内出现。

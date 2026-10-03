@@ -1,0 +1,65 @@
+{
+  "method": "Real-time production input, fixed synthetic noise/pauses",
+  "results": {
+    "production-new-tuning-noise": {
+      "correctSpellingOverThree": 0,
+      "deletions": 1,
+      "finalCorrectSpellingMaximumSeconds": 0.759332941395698,
+      "firstAppearanceMaximumSeconds": 0.7586689196340739,
+      "insertions": 0,
+      "measurement": "Reference-matched words only; omitted/wrong words counted as errors. Correct spelling uses its last lexical transition, not an earlier wrong spelling. Timings remain estimates from native word ends; no acoustic/paint ground truth.",
+      "nativeMaximumSeconds": 0.8852951796306314,
+      "nativeOverThree": 0,
+      "referenceMatchedWords": 137,
+      "referenceWords": 141,
+      "substitutions": 3,
+      "wordErrorRate": 0.028368794326241134,
+      "wordErrors": 4
+    },
+    "production-new-tuning-pauses": {
+      "correctSpellingOverThree": 0,
+      "deletions": 2,
+      "finalCorrectSpellingMaximumSeconds": 0.805015633946752,
+      "firstAppearanceMaximumSeconds": 0.805015633946752,
+      "insertions": 0,
+      "measurement": "Reference-matched words only; omitted/wrong words counted as errors. Correct spelling uses its last lexical transition, not an earlier wrong spelling. Timings remain estimates from native word ends; no acoustic/paint ground truth.",
+      "nativeMaximumSeconds": 0.805015633946752,
+      "nativeOverThree": 0,
+      "referenceMatchedWords": 138,
+      "referenceWords": 141,
+      "substitutions": 1,
+      "wordErrorRate": 0.02127659574468085,
+      "wordErrors": 3
+    },
+    "production-old-tuning-noise": {
+      "correctSpellingOverThree": 0,
+      "deletions": 3,
+      "finalCorrectSpellingMaximumSeconds": 0.7738588474039005,
+      "firstAppearanceMaximumSeconds": 0.770773360347377,
+      "insertions": 0,
+      "measurement": "Reference-matched words only; omitted/wrong words counted as errors. Correct spelling uses its last lexical transition, not an earlier wrong spelling. Timings remain estimates from native word ends; no acoustic/paint ground truth.",
+      "nativeMaximumSeconds": 0.7738588474039005,
+      "nativeOverThree": 0,
+      "referenceMatchedWords": 136,
+      "referenceWords": 141,
+      "substitutions": 2,
+      "wordErrorRate": 0.03546099290780142,
+      "wordErrors": 5
+    },
+    "production-old-tuning-pauses": {
+      "correctSpellingOverThree": 0,
+      "deletions": 5,
+      "finalCorrectSpellingMaximumSeconds": 0.7740707353386114,
+      "firstAppearanceMaximumSeconds": 0.7713490213081258,
+      "insertions": 0,
+      "measurement": "Reference-matched words only; omitted/wrong words counted as errors. Correct spelling uses its last lexical transition, not an earlier wrong spelling. Timings remain estimates from native word ends; no acoustic/paint ground truth.",
+      "nativeMaximumSeconds": 0.7740707353386114,
+      "nativeOverThree": 0,
+      "referenceMatchedWords": 134,
+      "referenceWords": 141,
+      "substitutions": 2,
+      "wordErrorRate": 0.04964539007092199,
+      "wordErrors": 7
+    }
+  }
+}

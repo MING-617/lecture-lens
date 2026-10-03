@@ -1,0 +1,6 @@
+Let us revisit the Python example. A gatherer accumulates the result, while a sentinel value terminates the iteration. NumPy makes immutable data structures easier to examine.
+In computer hardware, an inverter complements a bit. An opcode selects the instruction and an operand supplies data. We represent this information using hexadecimal notation. The ALU uses a register.
+For your dissertation, avoid plagiarism and cite the literature review. The viva examines your prototype and traceability. Integration testing must cover the minimum viable product.
+In software engineering, encapsulation, polymorphism and refactoring improve a design. A singleton is one design pattern. Scrum, Kanban and MoSCoW support planning a product backlog.
+For databases, referential integrity connects a foreign key and a candidate key. A tuple belongs to a relation and a schema describes its attributes. The relational model is declarative.
+In enterprise architecture, a mainframe may become a stovepipe. Shadow IT creates legacy debt. Cloud bursting, resource pooling and rapid elasticity are properties of cloud services. A service level agreement defines their responsibilities.

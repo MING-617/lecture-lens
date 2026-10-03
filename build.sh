@@ -18,6 +18,7 @@ if [[ -f "$task_coursepack" ]]; then
 else
     python3 "$task_root/Scripts/prepare-coursepack.py" "$task_root/Resources/coursepack.portable.json" "$task_stage_app/Contents/Resources/coursepack.json"
 fi
+cp "$task_root/Resources/recognition-settings.json" "$task_stage_app/Contents/Resources/"
 cp "$task_root/Resources/AppIcon.icns" "$task_stage_app/Contents/Resources/AppIcon.icns"
 cp -R "$task_root/Resources/StreamingEnglish" "$task_stage_app/Contents/Resources/"
 cp -R "$task_root/Resources/Licenses" "$task_stage_app/Contents/Resources/"

@@ -61,19 +61,22 @@ final class AudioFeeder: @unchecked Sendable {
     private var overflowReported = false
     private var samples: Int64 = 0
     private var lastText = ""
+    private var pendingChange: Int?
     let onLevel: @Sendable (Double, Double, Double) -> Void
     let onResult: @Sendable (RecognitionEvent) -> Void
     let onError: @Sendable (Error) -> Void
     let onPerformance: @Sendable (Double, Double) -> Void
     let onVoice: @Sendable (Bool) -> Void
+    var enhanced: Bool { decoder.enhanced }
 
     init(input: AVAudioFormat, model: URL, onLevel: @escaping @Sendable (Double, Double, Double) -> Void,
          onResult: @escaping @Sendable (RecognitionEvent) -> Void, onError: @escaping @Sendable (Error) -> Void,
-         onPerformance: @escaping @Sendable (Double, Double) -> Void, onVoice: @escaping @Sendable (Bool) -> Void = { _ in }) throws {
+         onPerformance: @escaping @Sendable (Double, Double) -> Void, onVoice: @escaping @Sendable (Bool) -> Void = { _ in },
+         contextualTerms: [String] = [], paths: Int = 2, score: Float = 1) throws {
         guard let format = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 16000, channels: 1, interleaved: false),
               let converter = AVAudioConverter(from: input, to: format) else { throw SessionError.format }
         self.converter = converter; self.format = format
-        self.decoder = try StreamingDecoder(model: model.path)
+        self.decoder = try StreamingDecoder(model: model.path, contextualTerms: contextualTerms, paths: paths, score: score)
         self.voice = try VoiceActivity(model: model.appendingPathComponent("silero_vad.onnx"))
         self.onLevel = onLevel; self.onResult = onResult; self.onError = onError; self.onPerformance = onPerformance; self.onVoice = onVoice
     }
@@ -120,11 +123,18 @@ final class AudioFeeder: @unchecked Sendable {
     }
     private func release(_ duration: Double) { lock.lock(); pendingSeconds = max(0, pendingSeconds - duration); lock.unlock() }
     private func publish(final: Bool, origin: Double, end: Double) {
-        let (text, words, offset) = decoder.result()
-        guard !text.isEmpty, final || text != lastText else { return }
+        let (text, words, changed) = decoder.result()
+        // Reading a result advances the parser even if only token timings
+        // changed. Preserve that earliest revision for the next delivered
+        // event, so saved timestamps and the on-screen words stay aligned.
+        guard final || text != lastText else {
+            pendingChange = min(pendingChange ?? changed, changed); return
+        }
         let now = ProcessInfo.processInfo.systemUptime
-        var event = RecognitionEvent(received: now - origin, start: offset, end: end, text: text, isFinal: final, words: words)
+        var event = RecognitionEvent(received: now - origin, start: 0, end: end, text: text, isFinal: final, words: words)
         event.producedUptime = now
+        event.changedFromWord = min(pendingChange ?? changed, changed)
+        pendingChange = nil
         lastText = text; onResult(event)
     }
     func finish(cancel: Bool = false) async {
@@ -151,8 +161,11 @@ final class AudioFeeder: @unchecked Sendable {
     var onStatus: ((String) -> Void)?
     var onPerformance: ((Double, Double) -> Void)?
     var onVoice: ((Bool) -> Void)?
+    var onEnhancement: ((Bool, String?) -> Void)?
+    var enhancementPaths = 2
+    var enhancementScore: Float = 1
 
-    func prepare(inputFormat: AVAudioFormat) async throws {
+    func prepare(inputFormat: AVAudioFormat, contextualTerms: [String] = []) async throws {
         guard let model = modelDirectory ?? Bundle.main.resourceURL?.appendingPathComponent("StreamingEnglish"),
               ["encoder.int8.onnx", "decoder.int8.onnx", "joiner.int8.onnx", "tokens.txt", "silero_vad.onnx"].allSatisfy({ FileManager.default.fileExists(atPath: model.appendingPathComponent($0).path) }) else { throw SessionError.unavailable }
         onStatus?("正在载入本地流式英文识别…")
@@ -160,7 +173,7 @@ final class AudioFeeder: @unchecked Sendable {
             DispatchQueue.main.async {
                 var delivered = event
                 if let produced = event.producedUptime {
-                    delivered = RecognitionEvent(received: event.received + ProcessInfo.processInfo.systemUptime - produced, start: event.start, end: event.end, text: event.text, isFinal: event.isFinal, words: event.words)
+                    delivered.receivedAtMainQueue(event.received + ProcessInfo.processInfo.systemUptime - produced)
                 }
                 self?.onResult?(delivered)
             }
@@ -169,9 +182,18 @@ final class AudioFeeder: @unchecked Sendable {
         let failure: @Sendable (Error) -> Void = { [weak self] error in DispatchQueue.main.async { self?.onError?(error) } }
         let performance: @Sendable (Double, Double) -> Void = { [weak self] wait, decode in DispatchQueue.main.async { self?.onPerformance?(wait, decode) } }
         let speech: @Sendable (Bool) -> Void = { [weak self] detected in DispatchQueue.main.async { self?.onVoice?(detected) } }
-        let worker = try await Task.detached(priority: .userInitiated) {
-            try AudioFeeder(input: inputFormat, model: model, onLevel: level, onResult: result, onError: failure, onPerformance: performance, onVoice: speech)
+        let paths = enhancementPaths, score = enhancementScore
+        let (worker, fallback) = try await Task.detached(priority: .userInitiated) {
+            do {
+                let worker = try AudioFeeder(input: inputFormat, model: model, onLevel: level, onResult: result, onError: failure, onPerformance: performance, onVoice: speech, contextualTerms: contextualTerms, paths: paths, score: score)
+                return (worker, Optional<String>.none)
+            } catch {
+                guard !contextualTerms.isEmpty else { throw error }
+                let normal = try AudioFeeder(input: inputFormat, model: model, onLevel: level, onResult: result, onError: failure, onPerformance: performance, onVoice: speech)
+                return (normal, Optional("专业词增强初始化失败，正在使用普通英文识别。"))
+            }
         }.value
+        onEnhancement?(worker.enhanced, fallback ?? (!contextualTerms.isEmpty && !worker.enhanced ? "专业词增强未能启用，正在使用普通英文识别。" : nil))
         try Task.checkCancellation(); feeder = worker
     }
     func startMicrophone(device: AudioDeviceID, localeID: String, contextualTerms: [String]) async throws {
@@ -185,7 +207,7 @@ final class AudioFeeder: @unchecked Sendable {
         }
         let format = input.outputFormat(forBus: 0)
         guard format.channelCount > 0, format.sampleRate > 0 else { throw SessionError.device }
-        try await prepare(inputFormat: format); try Task.checkCancellation(); guard let feeder else { throw SessionError.format }
+        try await prepare(inputFormat: format, contextualTerms: contextualTerms); try Task.checkCancellation(); guard let feeder else { throw SessionError.format }
         input.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, time in
             let uptime = time.isHostTimeValid ? AVAudioTime.seconds(forHostTime: time.hostTime) : ProcessInfo.processInfo.systemUptime - Double(buffer.frameLength) / format.sampleRate
             feeder.submit(buffer, at: uptime)
@@ -198,7 +220,7 @@ final class AudioFeeder: @unchecked Sendable {
     }
     func streamFile(url: URL, localeID: String, contextualTerms: [String], repetitions: Int = 1, maximumDuration: Double? = nil) async throws {
         let file = try AVAudioFile(forReading: url)
-        try await prepare(inputFormat: file.processingFormat); guard let feeder else { throw SessionError.format }
+        try await prepare(inputFormat: file.processingFormat, contextualTerms: contextualTerms); guard let feeder else { throw SessionError.format }
         let frames = AVAudioFrameCount(file.processingFormat.sampleRate / 10)
         let clock = ProcessInfo.processInfo.systemUptime
         var offset = 0.0

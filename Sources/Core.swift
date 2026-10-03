@@ -25,7 +25,7 @@ struct CaptionHistory {
     }
     mutating func clear() { captions = [] }
     mutating func acceptStreaming(_ event: RecognitionEvent) {
-        guard !event.words.isEmpty else { return }
+        guard !event.words.isEmpty else { captions = []; return }
         let count = 12, total = (event.words.count + count - 1) / count
         var lines: [Caption] = []
         for group in max(0, total - 300)..<total {
@@ -208,20 +208,92 @@ enum AutomaticTerms {
     }
 }
 
-struct WordStamp: Codable {
+struct WordStamp: Codable, Equatable {
     let text: String
     let start: Double
     let end: Double
 }
 
 struct RecognitionEvent: Codable {
-    let received: Double
+    var received: Double
     let start: Double
     let end: Double
     let text: String
     let isFinal: Bool
     let words: [WordStamp]
     var producedUptime: Double? = nil
+    // The earliest word affected by a native hypothesis revision. Optional
+    // so reports produced by older versions continue to decode.
+    var changedFromWord: Int? = nil
+    mutating func receivedAtMainQueue(_ value: Double) { received = value; producedUptime = nil }
+}
+
+struct TokenPiece: Equatable { let text: String; let time: Double }
+
+/// Beam search can replace or remove earlier tokens. Rebuild only the word
+/// containing the first changed token and its suffix, including punctuation.
+struct StreamingWords {
+    private var tokens: [TokenPiece] = []
+    private var words: [WordStamp] = []
+    private var starts: [Int] = []
+    mutating func accept(_ next: [TokenPiece]) -> ([WordStamp], Int) {
+        var common = 0
+        while common < min(tokens.count, next.count), tokens[common] == next[common] { common += 1 }
+        if common == tokens.count && common == next.count { return (words, words.count) }
+        var changed = starts.lastIndex(where: { $0 <= common }) ?? 0
+        // A revised token may REMOVE a word boundary: "super key" becomes
+        // "superkey". Include the preceding word when the old word's first
+        // token now starts with a continuation, rather than retaining a stale
+        // split in the display and archive.
+        if changed > 0, starts[changed] == common, common < next.count,
+           !next[common].text.hasPrefix("▁"), next[common].text.first?.isWhitespace != true {
+            changed -= 1
+        }
+        let begin = starts.isEmpty ? 0 : starts[changed]
+        words = Array(words.prefix(changed)); starts = Array(starts.prefix(changed))
+        var text = "", start = 0.0, end = 0.0, tokenStart = begin
+        func append() {
+            if !text.isEmpty { words.append(WordStamp(text: text, start: start, end: end)); starts.append(tokenStart) }
+        }
+        for i in begin..<next.count {
+            let piece = next[i].text.replacingOccurrences(of: "▁", with: " ")
+            // NeMo can emit a standalone space-prefixed comma retrospectively.
+            // It is punctuation, not a new spoken word with a delivery delay.
+            if !piece.contains(where: { $0.isLetter || $0.isNumber }), !piece.trimmingCharacters(in: .whitespaces).isEmpty {
+                let punctuation = piece.trimmingCharacters(in: .whitespaces)
+                if !text.isEmpty { text += punctuation }
+                else if let last = words.last {
+                    words[words.count - 1] = WordStamp(text: last.text + punctuation, start: last.start, end: last.end)
+                    changed = min(changed, words.count - 1)
+                }
+                continue
+            }
+            if piece.first?.isWhitespace == true && !text.isEmpty { append(); text = "" }
+            if text.isEmpty { start = next[i].time; end = start + 0.08; tokenStart = i }
+            text += piece.trimmingCharacters(in: .whitespaces)
+            if piece.contains(where: { $0.isLetter || $0.isNumber }) { end = next[i].time + 0.08 }
+        }
+        append(); tokens = next
+        return (words, changed)
+    }
+}
+
+enum RecognitionVocabulary {
+    static func phrases(_ values: [String]) -> [String] {
+        var seen: Set<String> = []
+        return values.compactMap { value in
+            let text = value.replacingOccurrences(of: "’", with: "'")
+                .replacingOccurrences(of: "–", with: "-").replacingOccurrences(of: "—", with: "-")
+                .split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
+            // Do not allow native hotword grammar or control characters into
+            // a phrase. Invalid imported entries still remain in the glossary.
+            guard !text.isEmpty, text.count <= 120, text.split(separator: " ").count <= 12,
+                  text.contains(where: { $0.isLetter || $0.isNumber }),
+                  text.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber || " '-.+#".contains($0)) }),
+                  seen.insert(text.lowercased()).inserted else { return nil }
+            return text
+        }.sorted { $0.lowercased() < $1.lowercased() }
+    }
 }
 
 /// The causal decoder emits token timings with partial text. Measure a word
@@ -233,23 +305,58 @@ struct StreamingLatencyTracker {
     private(set) var overLimit = 0
     private(set) var overTwo = 0
     private(set) var sampleCount = 0
-    private var completed = 0
-    private var previous: (index: Int, text: String, firstSeen: Double)?
+    private(set) var firstDisplayMaximum = 0.0
+    private(set) var correctionMaximum = 0.0
+    private(set) var corrections = 0
+    private struct Seen {
+        var id: Int
+        var word: WordStamp
+        var spelling: String
+        var firstSeen: Double
+        var spellingSeen: Double
+        var sampled: String?
+        var revised = false
+    }
+    private var previous: [Seen] = []
+    private var nextID = 0
     mutating func accept(_ event: RecognitionEvent) -> Double? {
-        guard !event.words.isEmpty else { return nil }
         let complete = event.isFinal ? event.words.count : max(0, event.words.count - 1)
-        guard complete >= completed else { return nil }
+        var unchanged = min(event.changedFromWord ?? 0, min(previous.count, event.words.count))
+        if event.changedFromWord == nil {
+            while unchanged < min(previous.count, event.words.count), previous[unchanged].word == event.words[unchanged] { unchanged += 1 }
+        }
+        var next = Array(previous.prefix(unchanged))
+        var oldByTime: [Int: [Seen]] = [:]
+        for old in previous.dropFirst(unchanged) { oldByTime[Int((old.word.start * 1000).rounded()), default: []].append(old) }
+        var used: Set<Int> = []
+        for (offset, word) in event.words.dropFirst(unchanged).enumerated() {
+            let key = Int((word.start * 1000).rounded()), text = LatencyTracker.tokens(word.text).joined(separator: " ")
+            var seen: Seen
+            let index = unchanged + offset
+            // Equivalent beam paths can realign timestamps long after the
+            // identical word was visible. Preserve its spelling's appearance;
+            // timestamp realignment is not a new word or a text correction.
+            if index < previous.count, previous[index].spelling == text, !used.contains(previous[index].id) {
+                seen = previous[index]
+            } else if let candidate = oldByTime[key]?.first(where: { !used.contains($0.id) }) {
+                seen = candidate
+                if seen.spelling != text { seen.spelling = text; seen.spellingSeen = event.received; seen.revised = true }
+            } else { seen = Seen(id: nextID, word: word, spelling: text, firstSeen: event.received, spellingSeen: event.received); nextID += 1 }
+            used.insert(seen.id); seen.word = word
+            next.append(seen)
+        }
         var added: [Double] = []
-        for i in completed..<complete {
-            let word = event.words[i], text = LatencyTracker.tokens(word.text).joined(separator: " ")
-            let first = previous?.index == i && previous?.text == text ? previous!.firstSeen : event.received
-            added.append(max(0, first - word.end))
+        // Only the changed tail plus the previously unfinished last word can
+        // need a sample. Revisions never erase already measured slow results.
+        let sampleStart = min(complete, max(0, min(unchanged, previous.count - 1)))
+        for i in sampleStart..<complete {
+            guard next[i].sampled != next[i].spelling else { continue }
+            let lag = max(0, next[i].spellingSeen - next[i].word.end)
+            firstDisplayMaximum = max(firstDisplayMaximum, next[i].firstSeen - next[i].word.end)
+            if next[i].revised { correctionMaximum = max(correctionMaximum, lag); corrections += 1 }
+            next[i].sampled = next[i].spelling; added.append(lag)
         }
-        completed = complete
-        if !event.isFinal, let word = event.words.last {
-            let index = event.words.count - 1, text = LatencyTracker.tokens(word.text).joined(separator: " ")
-            if previous?.index != index || previous?.text != text { previous = (index, text, event.received) }
-        }
+        previous = next
         for lag in added {
             sampleCount += 1
             maximum = max(maximum, lag)

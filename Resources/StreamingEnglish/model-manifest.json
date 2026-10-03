@@ -1,10 +1,9 @@
 {
   "engine": "NVIDIA Nemotron Speech Streaming English 0.6B, 560ms, int8",
-  "runtime": "sherpa-onnx v1.13.8 macOS arm64",
+  "runtime": "sherpa-onnx source commit 3df7adacc0d5f140e4e81b746dac0fbeeac16fab macOS arm64",
   "model_source": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-nemotron-speech-streaming-en-0.6b-560ms-int8-2026-04-25.tar.bz2",
   "model_archive_sha256": "78e2b79fcf7271553a74402a76b771b09ea40117a39566a79f52235b23db6358",
-  "runtime_source": "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-v1.13.8-osx-arm64-shared-no-tts-lib.tar.bz2",
-  "runtime_archive_sha256": "f3e0cbd86cc3f38dad30c97921b40e9a8bcc6f2c943777eb76ad77176993e417",
+  "runtime_source": "https://codeload.github.com/k2-fsa/sherpa-onnx/tar.gz/3df7adacc0d5f140e4e81b746dac0fbeeac16fab",
   "files": {
     "tokens.txt": "dc0b4584ab2e4ddbf888425c076c61b736e7356a015250db7d307e6f1a8188ff",
     "joiner.int8.onnx": "a35eac38a22ebceb04d230ed7afe0d68f446ba6914a036b97f14fece95967e23",
@@ -15,5 +14,7 @@
   "vad": {
     "source": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx",
     "sha256": "9e2449e1087496d8d4caba907f23e0bd3f78d91fa552479bb9c23ac09cbb1fd6"
-  }
+  },
+  "runtime_source_sha256": "60dd31fc03d14cc1d11ff42dcc436ff8b9931da1cf3865f6c5f4ecb124724f46",
+  "bpe_vocab_sha256": "2cff37e22c286a0f5a1efb61ec79f5e0e4589bb6dc401a6f62ce0e16c70583d1"
 }

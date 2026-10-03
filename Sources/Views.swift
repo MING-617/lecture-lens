@@ -1,12 +1,17 @@
 import SwiftUI
 import AppKit
 
-private let accent = Color(red: 0.16, green: 0.36, blue: 0.31)
+private let accent = Color(nsColor: NSColor(name: nil) { appearance in
+    appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        ? NSColor(srgbRed: 0.47, green: 0.79, blue: 0.70, alpha: 1)
+        : NSColor(srgbRed: 0.16, green: 0.36, blue: 0.31, alpha: 1)
+})
 
 struct LensView: View {
     @EnvironmentObject var model: AppModel
     var body: some View {
         VStack(spacing: 0) {
+            if model.compact { compactContent } else {
             header
             Divider()
             controls.padding(.horizontal, 24).padding(.vertical, 14)
@@ -23,16 +28,17 @@ struct LensView: View {
             if model.chineseHints && !model.suggestions.isEmpty { hints }
             Divider()
             footer
+            }
         }
         .background(Color(nsColor: .windowBackgroundColor))
         .tint(accent)
-        .frame(minWidth: 700, minHeight: 500)
+        .frame(minWidth: model.compact ? 360 : 700, minHeight: model.compact ? 160 : 500)
         .sheet(isPresented: $model.showGlossary, onDismiss: model.presentPendingStop) { GlossaryView().environmentObject(model) }
         .sheet(item: $model.detailTerm, onDismiss: model.presentPendingStop) { TermDetail(term: $0, courseTitle: model.courseTitle($0.course)) }
         .sheet(isPresented: $model.showHelp, onDismiss: model.presentPendingStop) {
             VStack(alignment: .leading, spacing: 18) {
                 Text("使用 Lecture Lens").font(.title2.bold())
-                Text("1. 直接点击“开始”，无需选择课程或章节。\n2. 英文逐步出现，灰色文字仍可能修正。\n3. 软件自动识别已有课程词表中的专业词，结合上下文显示中文提示；不确定的词义先不提示。\n4. “回看”只暂停画面；“回到实时”可追赶。\n5. “窗口置顶”让字幕窗口留在其他普通窗口前面，方便同时看课件。\n6. 点击术语旁的 ⓘ 看解释、来源与页码；“术语表”可搜索词条。\n7. 点击“停止”后，再点击“确认停止”；按回车默认继续听课。")
+                Text("1. 直接点击“开始”，无需选择课程或章节。\n2. 英文逐步出现，文字仍可能修正；专业词增强自动使用词表，中文开关只控制解释。\n3. 软件自动识别已有课程词表中的专业词，结合上下文显示中文提示；不确定的词义先不提示。\n4. “回看”只暂停画面；“回到实时”可追赶。\n5. “悬浮字幕”切换小窗口并置顶，不停止收音；“返回主界面”恢复原窗口。\n6. 点击术语旁的 ⓘ 看解释、来源与页码；“术语表”可搜索词条。\n7. 点击“停止”后，再点击“确认停止”；按回车默认继续听课。")
                     .lineSpacing(8)
                 Text("字幕采用持续流式识别，最新词逐步补齐，前面的词不会等待长句最终校正。延迟根据模型词片时间戳估计，界面不截断超时读数。目标是持续跟上、控制在 2–3 秒以内；准确率和教室收音仍需现场检查。")
                     .font(.callout).foregroundStyle(.secondary)
@@ -41,7 +47,7 @@ struct LensView: View {
                 HStack { Spacer(); Button("明白了") { model.showHelp = false }.keyboardShortcut(.defaultAction) }
             }.padding(28).frame(width: 540)
         }
-        .background(WindowAccessor(floating: model.floatWindow, model: model))
+        .background(WindowAccessor(floating: model.floatWindow, compact: model.compact, model: model))
         .onAppear { model.observeSystem() }
         .alert("是否停止本次字幕？", isPresented: $model.showStopConfirmation) {
             Button("继续听课", role: .cancel) { model.cancelStop() }.keyboardShortcut(.defaultAction)
@@ -49,6 +55,47 @@ struct LensView: View {
         } message: {
             Text("确认后会停止收音并保存本次完整字幕。")
         }
+    }
+
+    private var compactContent: some View {
+        VStack(spacing: 8) {
+            HStack(spacing: 12) {
+                Button("返回主界面", systemImage: "arrow.up.left.and.arrow.down.right") { model.toggleCompact() }
+                WindowDragHandle().frame(maxWidth: .infinity).frame(height: 24).help("拖动悬浮窗口")
+                Button { model.fontSize = max(20, model.fontSize - 2) } label: { Image(systemName: "textformat.size.smaller") }.help("缩小字幕")
+                Button { model.fontSize = min(54, model.fontSize + 2) } label: { Image(systemName: "textformat.size.larger") }.help("放大字幕")
+                Button(model.running || model.preparing ? "停止" : "开始") {
+                    if model.running || model.preparing { model.requestStop() } else { model.start() }
+                }.buttonStyle(.borderedProminent).disabled(model.stopping).keyboardShortcut("r", modifiers: [.command])
+            }.font(.caption)
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 6) {
+                        if model.history.captions.isEmpty {
+                            Text(model.running ? "等待英文讲话…" : "点击“开始”即可听课").foregroundStyle(.secondary).padding(.vertical, 16)
+                        } else {
+                            ForEach(model.history.captions.suffix(2)) { caption in
+                                Text(caption.text).foregroundStyle(caption.isFinal ? Color.primary : Color.secondary)
+                            }
+                        }
+                        Color.clear.frame(height: 1).id("compact-bottom")
+                    }.font(.system(size: model.fontSize)).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .defaultScrollAnchor(.bottom, for: .initialOffset)
+                .onChange(of: model.history.captions) { _, _ in proxy.scrollTo("compact-bottom", anchor: .bottom) }
+                .onAppear { proxy.scrollTo("compact-bottom", anchor: .bottom) }
+            }
+            if model.chineseHints, !model.suggestions.isEmpty {
+                Text(model.suggestions.prefix(2).map { $0.english + "：" + $0.chinese }.joined(separator: " · "))
+                    .font(.caption).foregroundStyle(Color(nsColor: .systemGreen)).lineLimit(2).frame(maxWidth: .infinity, alignment: .leading)
+            }
+            HStack {
+                Text(model.error ?? model.enhancementNotice ?? model.status).lineLimit(2)
+                    .foregroundStyle(model.error != nil || model.enhancementNotice != nil || model.stalled ? Color.orange : Color.secondary)
+                Spacer()
+                if let delay = model.latency { Text(String(format: "≈ %.1f 秒", delay)).foregroundStyle(delay > 3 ? Color.orange : Color.secondary) }
+            }.font(.caption)
+        }.padding(12)
     }
 
     private var header: some View {
@@ -110,9 +157,11 @@ struct LensView: View {
                     }.padding(.horizontal, 30).padding(.vertical, 26)
                 }
             }
+            .defaultScrollAnchor(.bottom, for: .initialOffset)
             .onChange(of: model.history.captions) { _, _ in
                 if model.frozen == nil { proxy.scrollTo("bottom", anchor: .bottom) }
             }
+            .onAppear { if model.frozen == nil { proxy.scrollTo("bottom", anchor: .bottom) } }
             .onChange(of: model.frozen == nil) { _, live in if live { proxy.scrollTo("bottom", anchor: .bottom) } }
             .overlay(alignment: .topTrailing) {
                 if model.frozen != nil {
@@ -142,7 +191,8 @@ struct LensView: View {
         VStack(spacing: 12) {
             HStack(spacing: 14) {
                 Circle().fill(model.running ? accent : Color.secondary.opacity(0.4)).frame(width: 7, height: 7)
-                Text(model.status).font(.caption).foregroundStyle(model.stalled ? .orange : .secondary).lineLimit(1)
+                Text(model.enhancementNotice ?? model.status).font(.caption).foregroundStyle(model.stalled || model.enhancementNotice != nil ? .orange : .secondary).lineLimit(1)
+                if model.running { Text(model.enhancementActive ? "专业词增强" : "普通识别").font(.caption).foregroundStyle(.secondary) }
                 GeometryReader { geometry in
                     Capsule().fill(accent.opacity(0.13))
                         .overlay(alignment: .leading) { Capsule().fill(accent).frame(width: max(2, geometry.size.width * model.meter)) }
@@ -151,7 +201,7 @@ struct LensView: View {
                 if let delay = model.latency {
                     Text(String(format: "最新词延迟 ≈ %.1f 秒", delay)).font(.caption.monospacedDigit())
                         .foregroundStyle(delay > 3 || model.stalled ? Color.orange : Color.secondary)
-                        .help(String(format: "本次估计最大 %.2f 秒；超过 3 秒：%d 个词。采集／排队最大 %.2f 秒，单次处理最大 %.2f 秒。使用词片时间戳估计，遗漏不计入；不截断超时值。", model.tracker.maximum, model.tracker.overLimit, model.maximumQueueWait, model.maximumDecodeTime))
+                        .help(String(format: "首次出现最大 %.2f 秒；修订后拼写最大 %.2f 秒；本次估计最大 %.2f 秒；超过 3 秒：%d 次。采集／排队最大 %.2f 秒，单次处理最大 %.2f 秒。使用词片时间戳估计，遗漏不计入；不截断超时值。", model.tracker.firstDisplayMaximum, model.tracker.correctionMaximum, model.tracker.maximum, model.tracker.overLimit, model.maximumQueueWait, model.maximumDecodeTime))
                 } else { Text("目标 ≤ 3 秒 · 尚未测量").font(.caption).foregroundStyle(.secondary) }
             }
             HStack(spacing: 16) {
@@ -159,6 +209,7 @@ struct LensView: View {
                     .disabled(model.history.captions.isEmpty).keyboardShortcut(.space, modifiers: [.command])
                 Toggle("中文术语", isOn: $model.chineseHints).toggleStyle(.checkbox).disabled(model.terms.isEmpty).help("自动识别课程专业词汇，无需选课；关闭后只显示英文字幕")
                 Button("术语表") { model.showGlossary = true }
+                Button("悬浮字幕", systemImage: "rectangle.compress.vertical") { model.toggleCompact() }
                 Spacer()
                 Button { model.fontSize = max(20, model.fontSize - 2) } label: { Image(systemName: "textformat.size.smaller") }.help("缩小字幕")
                 Button { model.fontSize = min(54, model.fontSize + 2) } label: { Image(systemName: "textformat.size.larger") }.help("放大字幕")
@@ -189,6 +240,8 @@ struct GlossaryView: View {
             HStack { Text("课程术语").font(.title2.bold()); Spacer(); Button("完成") { dismiss() }.keyboardShortcut(.defaultAction) }
             Text("已整理桌面 Moodle 资料中 6 门课的 55 份课件。字幕会自动匹配专业词和上下文，无需选课。中文是辅助解释，未上传的新课件和词条不会自动加入。")
                 .font(.callout).foregroundStyle(.secondary)
+            Toggle("专业词增强", isOn: Binding(get: { model.enhanceTerms }, set: model.setEnhancement))
+                .disabled(model.hasActiveSession).help("自动用英文课程词表帮助识别；停止后可调整，下次开始生效。中文术语开关不影响英文识别。")
             TextField("搜索英文、中文或课程名（\(model.terms.count) 个词条／词义）", text: $search)
             HStack { TextField("英文词或词组", text: $english); TextField("中文释义", text: $chinese) }
             TextField("简短解释（可选）", text: $explanation)
@@ -265,12 +318,46 @@ struct TermDetail: View {
     }
 }
 
+private struct WindowDragHandle: NSViewRepresentable {
+    final class Handle: NSView {
+        private var anchor: NSPoint?
+        private var origin: NSPoint?
+        override func mouseDown(with event: NSEvent) {
+            guard let window else { return }
+            anchor = window.convertPoint(toScreen: event.locationInWindow); origin = window.frame.origin
+        }
+        override func mouseDragged(with event: NSEvent) {
+            guard let window, let anchor, let origin else { return }
+            let point = window.convertPoint(toScreen: event.locationInWindow)
+            var next = NSPoint(x: origin.x + point.x - anchor.x, y: origin.y + point.y - anchor.y)
+            if let visible = window.screen?.visibleFrame {
+                next.x = min(visible.maxX - 80, max(visible.minX - window.frame.width + 80, next.x))
+                next.y = min(visible.maxY - window.frame.height, max(visible.minY + 28 - window.frame.height, next.y))
+            }
+            window.setFrameOrigin(next)
+        }
+        override func mouseUp(with event: NSEvent) { anchor = nil; origin = nil }
+    }
+    func makeNSView(context: Context) -> NSView {
+        let view = Handle()
+        view.setAccessibilityElement(true)
+        view.setAccessibilityRole(.group)
+        view.setAccessibilityLabel("拖动悬浮窗口")
+        return view
+    }
+    func updateNSView(_ view: NSView, context: Context) {}
+}
+
 struct WindowAccessor: NSViewRepresentable {
     var floating: Bool
+    var compact: Bool = false
     var model: AppModel
     final class Coordinator: NSObject, NSWindowDelegate {
         weak var model: AppModel?
         weak var original: NSWindowDelegate?
+        var lastCompact = false
+        var normalFrame: NSRect?
+        var compactFrame: NSRect?
         override func responds(to selector: Selector!) -> Bool { super.responds(to: selector) || (original?.responds(to: selector) ?? false) }
         override func forwardingTarget(for selector: Selector!) -> Any? { original?.responds(to: selector) == true ? original : super.forwardingTarget(for: selector) }
         func windowShouldClose(_ sender: NSWindow) -> Bool {
@@ -283,7 +370,22 @@ struct WindowAccessor: NSViewRepresentable {
     func updateNSView(_ view: NSView, context: Context) {
         DispatchQueue.main.async {
             guard let window = view.window else { return }
-            window.level = floating ? .floating : .normal
+            window.isMovable = true
+            window.isMovableByWindowBackground = compact
+            window.level = floating || compact ? .floating : .normal
+            if context.coordinator.lastCompact != compact {
+                if compact {
+                    context.coordinator.normalFrame = window.frame
+                    let frame = context.coordinator.compactFrame ?? NSRect(x: window.frame.minX, y: window.frame.maxY - 268, width: 560, height: 268)
+                    window.contentMinSize = NSSize(width: 360, height: 160)
+                    window.setFrame(frame, display: true)
+                } else {
+                    context.coordinator.compactFrame = window.frame
+                    window.contentMinSize = NSSize(width: 700, height: 500)
+                    if let frame = context.coordinator.normalFrame { window.setFrame(frame, display: true) }
+                }
+                context.coordinator.lastCompact = compact
+            }
             model.window = window
             context.coordinator.model = model
             if window.delegate !== context.coordinator {

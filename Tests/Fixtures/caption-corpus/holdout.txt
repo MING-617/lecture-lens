@@ -1,0 +1,6 @@
+We use an immutable tuple and a dictionary in Python. A sentinel value ends the loop. The gatherer keeps the total and the stepper moves forward.
+An assembler converts assembly language into machine code. The program counter holds an address. A page fault can interrupt the process.
+The dissertation includes an abstract, an appendix and references. A supervisor evaluates the prototype using integration testing and user acceptance testing.
+The Scrum master plans a sprint review and a retrospective. Coupling and cohesion affect refactoring. A class diagram shows inheritance and aggregation.
+The relational model has entities, attributes and relationships. Entity integrity requires a primary key. A superkey can contain additional attributes. The foreign key references another relation.
+A hybrid cloud combines a public cloud with a private cloud. Platform as a service and software as a service have a service level agreement. Incident response checks the audit log.

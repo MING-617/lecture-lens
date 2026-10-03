@@ -6,7 +6,8 @@ final class TranscriptArchive: @unchecked Sendable {
     let url: URL
     private let queue = DispatchQueue(label: "com.ming.lecturelens.transcript", qos: .utility)
     private let handle: FileHandle
-    private var committed = 0
+    private var committed: [WordStamp] = []
+    private var offsets: [UInt64] = []
     private var failed: Error?
     private var closed = false
     private var lastSync = ProcessInfo.processInfo.systemUptime
@@ -27,22 +28,28 @@ final class TranscriptArchive: @unchecked Sendable {
     // Called serially by the main actor; only file operations run on the queue.
     func accept(_ event: RecognitionEvent) {
         let complete = event.isFinal ? event.words.count : max(0, event.words.count - 1)
-        guard complete > committed else { return }
-        var text = ""
-        for i in committed..<complete {
-            let word = event.words[i]
-            if i % 12 == 0 {
-                if i > 0 { text += "\n" }
-                text += String(format: "[%02d:%02d] ", Int(word.start) / 60, Int(word.start) % 60)
-            }
-            text += word.text + " "
-        }
-        committed = complete
-        let data = Data(text.utf8)
         queue.async { [self] in
             guard !closed, failed == nil else { return }
             do {
-                try handle.write(contentsOf: data)
+                var common = min(event.changedFromWord ?? 0, min(complete, committed.count))
+                if event.changedFromWord == nil {
+                    while common < min(complete, committed.count), committed[common] == event.words[common] { common += 1 }
+                }
+                if common < committed.count {
+                    try handle.truncate(atOffset: offsets[common]); try handle.seek(toOffset: offsets[common])
+                    committed.removeSubrange(common...); offsets.removeSubrange(common...)
+                }
+                for i in common..<complete {
+                    let word = event.words[i]
+                    offsets.append(try handle.offset())
+                    var text = ""
+                    if i % 12 == 0 {
+                        if i > 0 { text += "\n" }
+                        text += String(format: "[%02d:%02d] ", Int(word.start) / 60, Int(word.start) % 60)
+                    }
+                    text += word.text + " "
+                    try handle.write(contentsOf: Data(text.utf8)); committed.append(word)
+                }
                 let now = ProcessInfo.processInfo.systemUptime
                 if now - lastSync >= 5 { try handle.synchronize(); lastSync = now }
             } catch { record(error) }

@@ -1,0 +1,6 @@
+This is a classroom caption test. In Python, a gatherer keeps a running total. A sentinel value tells a loop when to stop. A stepper changes regularly. NumPy stores an array.
+The CPU uses an opcode and an operand. An interrupt handler manages a context switch. Hexadecimal represents binary values.
+My dissertation supervisor asked for a literature review and a test harness. The minimum viable product needs usability and accessibility testing.
+Scrum uses a sprint backlog and user stories. Kanban limits work in progress. Encapsulation and polymorphism help software engineering.
+A relational database stores each tuple in a schema. A candidate key identifies a record. A foreign key enforces referential integrity. SQL is declarative.
+Shadow IT can create legacy debt. Zero trust uses an audit log. Infrastructure as a service supports resource pooling and rapid elasticity. Cloud bursting handles extra demand.

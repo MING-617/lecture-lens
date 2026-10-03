@@ -1,0 +1,30 @@
+--- a/sherpa-onnx/csrc/online-transducer-modified-beam-search-nemo-decoder.cc
++++ b/sherpa-onnx/csrc/online-transducer-modified-beam-search-nemo-decoder.cc
+@@ -285,7 +285,26 @@
+   // noise-only audio.
+   Hypothesis best = hyps.GetMostProbable(false /*length_norm*/);
+ 
+-  r.hyps = std::move(hyps);
++  // Lecture Lens: commit the best acoustic prefix after a bounded 1.6s
++  // revision window. Keep encoder and recurrent decoder state continuous;
++  // prune only alternative paths that would rewrite already spoken history.
++  // This bounds linguistic revision time without hiding or clipping latency.
++  const int32_t revision_frames =
++      std::max(1, 160 / model->SubsamplingFactor());
++  const int32_t cutoff = frame_offset + num_rows - revision_frames;
++  size_t stable = 0;
++  while (stable < best.timestamps.size() && best.timestamps[stable] <= cutoff) {
++    ++stable;
++  }
++  Hypotheses bounded;
++  for (auto &p : hyps) {
++    auto &h = p.second;
++    if (h.ys.size() >= stable &&
++        std::equal(best.ys.begin(), best.ys.begin() + stable, h.ys.begin())) {
++      bounded.Add(std::move(h));
++    }
++  }
++  r.hyps = std::move(bounded);
+   r.tokens = std::move(best.ys);
+   r.timestamps = std::move(best.timestamps);
+   r.ys_probs = std::move(best.ys_probs);
