@@ -18,7 +18,7 @@ final class StreamingDecoder {
         config.model_config.transducer.decoder = c(model + "/decoder.int8.onnx")
         config.model_config.transducer.joiner = c(model + "/joiner.int8.onnx")
         config.model_config.tokens = c(model + "/tokens.txt")
-        config.model_config.num_threads = 2; config.model_config.provider = c("cpu")
+        config.model_config.num_threads = 2; config.model_config.provider = c(Self.cpuProvider(model: model))
         let phrases = RecognitionVocabulary.phrases(contextualTerms)
         let vocabulary = model + "/bpe.vocab"
         enhanced = !phrases.isEmpty && Self.validVocabulary(vocabulary, tokens: model + "/tokens.txt")
@@ -37,6 +37,14 @@ final class StreamingDecoder {
         recognizer = r
         guard let s = SherpaOnnxCreateOnlineStream(r) else { SherpaOnnxDestroyOnlineRecognizer(r); throw NSError(domain: "stream", code: 1) }
         stream = s; strings = pool; retained = true
+    }
+    static func cpuProvider(model: String) -> String {
+        let path = model + "/cpu-runtime.conf"
+        let expected = "SessionConfig.session.intra_op.allow_spinning=0\nSessionConfig.session.inter_op.allow_spinning=0\n"
+        // The native provider parser terminates on a malformed config file.
+        // Optional power settings must be validated before entering it.
+        guard let contents = try? String(contentsOfFile: path, encoding: .utf8), contents == expected else { return "cpu" }
+        return "cpu:" + path
     }
     private static func validVocabulary(_ path: String, tokens: String) -> Bool {
         guard let text = try? String(contentsOfFile: path, encoding: .utf8),

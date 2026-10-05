@@ -1,0 +1,449 @@
+{
+  "backup": {
+    "archiveSHA256": "f300ccb8a151d00b9e1bf8437907ac72e67c2a8fb9342e5a3820577d1c47b74b",
+    "bundleFiles": 20,
+    "verifiedArchiveMatchesInstalled": true,
+    "version": "0.5.0 / build 8"
+  },
+  "conditions": {
+    "silence": {
+      "cpuWorkReductionFraction": 0.20102268110171317,
+      "meanCPUSeconds": {
+        "baseline": 10.767775,
+        "sleep": 8.603208
+      },
+      "method": "Serial real-time input; process user+system CPU time from model-ready to finish/release. Excludes model initialization. CPU seconds measure work, not watts or battery-life gain. Native timestamps estimate latency; omitted words counted separately against reference.",
+      "order": [
+        "baseline",
+        "sleep"
+      ],
+      "runs": [
+        {
+          "cpuSeconds": 10.767775,
+          "errors": [],
+          "maximumProcessingSeconds": 0.1140834583202377,
+          "maximumQueueSeconds": 0.1207145833177492,
+          "maximumSeconds": 0,
+          "mode": "baseline",
+          "name": "baseline-1",
+          "overThree": 0,
+          "sampleCount": 0,
+          "singleCorePercent": 35.70730595842043,
+          "wallSeconds": 30.155663416720927
+        },
+        {
+          "cpuSeconds": 8.603208,
+          "errors": [],
+          "maximumProcessingSeconds": 0.10625929164234549,
+          "maximumQueueSeconds": 0.1130852916976437,
+          "maximumSeconds": 0,
+          "mode": "sleep",
+          "name": "sleep-1",
+          "overThree": 0,
+          "sampleCount": 0,
+          "singleCorePercent": 28.52932489933844,
+          "wallSeconds": 30.155666249920614
+        }
+      ]
+    },
+    "tuning-noise": {
+      "cpuWorkReductionFraction": 0.20975721159794303,
+      "meanCPUSeconds": {
+        "baseline": 21.661496,
+        "sleep": 17.117841000000002
+      },
+      "method": "Serial real-time input; process user+system CPU time from model-ready to finish/release. Excludes model initialization. CPU seconds measure work, not watts or battery-life gain. Native timestamps estimate latency; omitted words counted separately against reference.",
+      "order": [
+        "baseline",
+        "sleep"
+      ],
+      "runs": [
+        {
+          "accuracy": {
+            "correctSpellingOverThree": 0,
+            "deletions": 1,
+            "finalCorrectSpellingMaximumSeconds": 0.7830518732825311,
+            "firstAppearanceMaximumSeconds": 0.7830518732825311,
+            "insertions": 0,
+            "measurement": "Reference-matched words only; omitted/wrong words counted as errors. Correct spelling uses its last lexical transition, not an earlier wrong spelling. Timings remain estimates from native word ends; no acoustic/paint ground truth.",
+            "nativeMaximumSeconds": 0.9069643462589028,
+            "nativeOverThree": 0,
+            "referenceMatchedWords": 137,
+            "referenceWords": 141,
+            "substitutions": 3,
+            "wordErrorRate": 0.028368794326241134,
+            "wordErrors": 4
+          },
+          "cpuSeconds": 21.661496,
+          "errors": [],
+          "maximumProcessingSeconds": 0.13016991666518152,
+          "maximumQueueSeconds": 0.13403608335647732,
+          "maximumSeconds": 0.9069643462589028,
+          "mode": "baseline",
+          "name": "baseline-1",
+          "overThree": 0,
+          "sampleCount": 140,
+          "singleCorePercent": 35.63718658174485,
+          "wallSeconds": 60.78340654168278
+        },
+        {
+          "accuracy": {
+            "correctSpellingOverThree": 0,
+            "deletions": 1,
+            "finalCorrectSpellingMaximumSeconds": 0.778421930694023,
+            "firstAppearanceMaximumSeconds": 0.7767580269882473,
+            "insertions": 0,
+            "measurement": "Reference-matched words only; omitted/wrong words counted as errors. Correct spelling uses its last lexical transition, not an earlier wrong spelling. Timings remain estimates from native word ends; no acoustic/paint ground truth.",
+            "nativeMaximumSeconds": 0.9015643879119324,
+            "nativeOverThree": 0,
+            "referenceMatchedWords": 137,
+            "referenceWords": 141,
+            "substitutions": 3,
+            "wordErrorRate": 0.028368794326241134,
+            "wordErrors": 4
+          },
+          "cpuSeconds": 17.117841000000002,
+          "errors": [],
+          "maximumProcessingSeconds": 0.11139712494332343,
+          "maximumQueueSeconds": 0.11681999987922609,
+          "maximumSeconds": 0.9015643879119324,
+          "mode": "sleep",
+          "name": "sleep-1",
+          "overThree": 0,
+          "sampleCount": 140,
+          "singleCorePercent": 28.168927849438226,
+          "wallSeconds": 60.768521583406255
+        }
+      ]
+    },
+    "tuning-pauses": {
+      "cpuWorkReductionFraction": 0.1923178091916239,
+      "meanCPUSeconds": {
+        "baseline": 33.458918999999995,
+        "sleep": 27.024172999999998
+      },
+      "method": "Serial real-time input; process user+system CPU time from model-ready to finish/release. Excludes model initialization. CPU seconds measure work, not watts or battery-life gain. Native timestamps estimate latency; omitted words counted separately against reference.",
+      "order": [
+        "baseline",
+        "sleep"
+      ],
+      "runs": [
+        {
+          "accuracy": {
+            "correctSpellingOverThree": 0,
+            "deletions": 2,
+            "finalCorrectSpellingMaximumSeconds": 0.7742091677663865,
+            "firstAppearanceMaximumSeconds": 0.7718818287411722,
+            "insertions": 0,
+            "measurement": "Reference-matched words only; omitted/wrong words counted as errors. Correct spelling uses its last lexical transition, not an earlier wrong spelling. Timings remain estimates from native word ends; no acoustic/paint ground truth.",
+            "nativeMaximumSeconds": 0.7742091677663865,
+            "nativeOverThree": 0,
+            "referenceMatchedWords": 138,
+            "referenceWords": 141,
+            "substitutions": 1,
+            "wordErrorRate": 0.02127659574468085,
+            "wordErrors": 3
+          },
+          "cpuSeconds": 33.458918999999995,
+          "errors": [],
+          "maximumProcessingSeconds": 0.09971874998882413,
+          "maximumQueueSeconds": 0.11211816663853824,
+          "maximumSeconds": 0.7742091677663865,
+          "mode": "baseline",
+          "name": "baseline-1",
+          "overThree": 0,
+          "sampleCount": 139,
+          "singleCorePercent": 34.9323617693183,
+          "wallSeconds": 95.78201216668822
+        },
+        {
+          "accuracy": {
+            "correctSpellingOverThree": 0,
+            "deletions": 2,
+            "finalCorrectSpellingMaximumSeconds": 0.7758744537876936,
+            "firstAppearanceMaximumSeconds": 0.7758744537876936,
+            "insertions": 0,
+            "measurement": "Reference-matched words only; omitted/wrong words counted as errors. Correct spelling uses its last lexical transition, not an earlier wrong spelling. Timings remain estimates from native word ends; no acoustic/paint ground truth.",
+            "nativeMaximumSeconds": 0.7758744537876936,
+            "nativeOverThree": 0,
+            "referenceMatchedWords": 138,
+            "referenceWords": 141,
+            "substitutions": 1,
+            "wordErrorRate": 0.02127659574468085,
+            "wordErrors": 3
+          },
+          "cpuSeconds": 27.024172999999998,
+          "errors": [],
+          "maximumProcessingSeconds": 0.10854233335703611,
+          "maximumQueueSeconds": 0.1150343333138153,
+          "maximumSeconds": 0.7758744537876936,
+          "mode": "sleep",
+          "name": "sleep-1",
+          "overThree": 0,
+          "sampleCount": 139,
+          "singleCorePercent": 28.21314775397158,
+          "wallSeconds": 95.785742291715
+        }
+      ]
+    }
+  },
+  "date": "2026-10-05",
+  "finalSignedRelease": {
+    "accuracy": {
+      "correctSpellingOverThree": 0,
+      "deletions": 0,
+      "finalCorrectSpellingMaximumSeconds": 0.7842703238874673,
+      "firstAppearanceMaximumSeconds": 0.7842703238874673,
+      "insertions": 0,
+      "measurement": "Reference-matched words only; omitted/wrong words counted as errors. Correct spelling uses its last lexical transition, not an earlier wrong spelling. Timings remain estimates from native word ends; no acoustic/paint ground truth.",
+      "nativeMaximumSeconds": 0.7842703238874673,
+      "nativeOverThree": 0,
+      "referenceMatchedWords": 141,
+      "referenceWords": 141,
+      "substitutions": 0,
+      "wordErrorRate": 0.0,
+      "wordErrors": 0
+    },
+    "activeCPUSeconds": 17.050289,
+    "activeWallSeconds": 60.770262375008315,
+    "archiveSHA256": "b078d50b4b151c9ecdc84f304da0e5a4dc7e120f83bbcd248b88caf71793ad58",
+    "cpuWaitingMode": "sleep",
+    "errors": [],
+    "version": "0.5.1"
+  },
+  "guiAndInstall": {
+    "compactEntryVerified": true,
+    "existingUserSubtitleFilesPreserved": 7,
+    "identicalBundleFiles": 21,
+    "launchVerified": true,
+    "microphoneTestThisVersion": false,
+    "reasonMicrophoneNotRestarted": "User had stopped listening; updated app left stopped. Production file input and mock session/stop regressions verified.",
+    "startButtonAndStoppedStateVisible": true,
+    "status": "passed",
+    "strictSignatureValid": true,
+    "windowMovedFullyOnscreen": true
+  },
+  "hardware": "Apple M4, 10 logical CPUs, 24 GB RAM, macOS 26.6.2, arm64",
+  "human": {
+    "baselineAccuracy": {
+      "correctSpellingOverThree": 0,
+      "deletions": 2,
+      "finalCorrectSpellingMaximumSeconds": 1.14989854624028,
+      "firstAppearanceMaximumSeconds": 1.14989854624028,
+      "insertions": 0,
+      "measurement": "Reference-matched words only; omitted/wrong words counted as errors. Correct spelling uses its last lexical transition, not an earlier wrong spelling. Timings remain estimates from native word ends; no acoustic/paint ground truth.",
+      "nativeMaximumSeconds": 1.14989854624028,
+      "nativeOverThree": 0,
+      "referenceMatchedWords": 815,
+      "referenceWords": 824,
+      "substitutions": 7,
+      "wordErrorRate": 0.010922330097087379,
+      "wordErrors": 9
+    },
+    "candidateAccuracy": {
+      "correctSpellingOverThree": 0,
+      "deletions": 2,
+      "finalCorrectSpellingMaximumSeconds": 1.1596927545778328,
+      "firstAppearanceMaximumSeconds": 1.1596927545778328,
+      "insertions": 0,
+      "measurement": "Reference-matched words only; omitted/wrong words counted as errors. Correct spelling uses its last lexical transition, not an earlier wrong spelling. Timings remain estimates from native word ends; no acoustic/paint ground truth.",
+      "nativeMaximumSeconds": 1.1596927545778328,
+      "nativeOverThree": 0,
+      "referenceMatchedWords": 815,
+      "referenceWords": 824,
+      "substitutions": 7,
+      "wordErrorRate": 0.010922330097087379,
+      "wordErrors": 9
+    },
+    "candidateCPUSeconds": 99.670321,
+    "candidateMaximumProcessingSeconds": 0.10977099998854101,
+    "candidateMaximumQueueSeconds": 0.11935716669540852,
+    "candidateWallSeconds": 350.0767105832929,
+    "errors": [],
+    "identicalFinalTranscript": true,
+    "referenceBaseline": "0.5.0 previously recorded real-time production result; accuracy comparison only, no contemporaneous baseline CPU measurement",
+    "selection": {
+      "archiveMD5": "32fa31d27d2e1cad72775fee3f4849a9",
+      "ids": [
+        "61-70968-0000",
+        "61-70968-0001",
+        "61-70968-0002",
+        "61-70968-0003",
+        "121-121726-0000",
+        "121-121726-0001",
+        "121-121726-0002",
+        "121-121726-0003",
+        "237-126133-0000",
+        "237-126133-0001",
+        "237-126133-0002",
+        "237-126133-0003",
+        "260-123286-0000",
+        "260-123286-0001",
+        "260-123286-0002",
+        "260-123286-0003",
+        "672-122797-0000",
+        "672-122797-0001",
+        "672-122797-0002",
+        "672-122797-0003",
+        "908-157963-0000",
+        "908-157963-0001",
+        "908-157963-0002",
+        "908-157963-0003",
+        "1089-134686-0000",
+        "1089-134686-0001",
+        "1089-134686-0002",
+        "1089-134686-0003",
+        "1188-133604-0000",
+        "1188-133604-0001",
+        "1188-133604-0002",
+        "1188-133604-0003",
+        "1221-135766-0000",
+        "1221-135766-0001",
+        "1221-135766-0002",
+        "1221-135766-0003",
+        "1284-1180-0000",
+        "1284-1180-0001",
+        "1284-1180-0002",
+        "1284-1180-0003"
+      ],
+      "license": "CC BY 4.0",
+      "rule": "First 4 sorted utterance IDs from each of the first 10 numeric speaker IDs; selection fixed before recognition. 800ms silence between clips; continuous model, no resets.",
+      "seconds": 349.905,
+      "source": "https://www.openslr.org/12"
+    },
+    "status": "passed"
+  },
+  "inputSHA256": {
+    "ordinary-human": "1ccdd73a2956888805a4acda2939f45e2e7bae3409bec882daf9ac78d6d09fb5",
+    "silence": "40abc924dc63f75aafb2400bb99fd66741e22eb9ff2450973a18db53a06286ac",
+    "tuning": "3721379e9ff0b49898b3fa6c43cf89bb7bdc0b5af674db8ead346917ec718dac",
+    "tuning-noise": "81c03b79e16665973e05eef571b1a9377f3e1416933addc9128941932eed913a",
+    "tuning-pauses": "fb775bcced0c36d15e497a21ab03442e0614aac3fe374573a9a888ffd435731e"
+  },
+  "method": "Serial paced production pipeline. Same candidate executable and identical model weights with default CPU vs SessionConfig intra/inter allow_spinning=0. Process user+system CPU time, model-ready through finalization and worker release; initialization excluded. CPU time measures work, not watts or battery-life percentage. Does not measure SwiftUI savings or room acoustics/compositor. No clipping above 3s; accuracy counts omissions separately.",
+  "model": "Nemotron English 0.6B 560ms int8",
+  "parameters": {
+    "hotwordScore": 0.5,
+    "paths": 2,
+    "threads": 2
+  },
+  "recognizer": "sherpa-onnx 3df7ada + unchanged bounded revisions patch",
+  "regressionChecks": "passed: core, mock session/stop, native audio queue, revisions/archive/export, hotword and CPU configuration fallback, independent metrics; actual legacy 0.5 benchmark report decoding",
+  "tuning": {
+    "cpuWorkReductionFraction": 0.20341007505951858,
+    "meanCPUSeconds": {
+      "baseline": 21.2637255,
+      "sleep": 16.9384695
+    },
+    "order": [
+      "baseline",
+      "sleep",
+      "sleep",
+      "baseline"
+    ],
+    "runs": [
+      {
+        "accuracy": {
+          "correctSpellingOverThree": 0,
+          "deletions": 0,
+          "finalCorrectSpellingMaximumSeconds": 0.7737678474094736,
+          "firstAppearanceMaximumSeconds": 0.7728467612341063,
+          "insertions": 0,
+          "measurement": "Reference-matched words only; omitted/wrong words counted as errors. Correct spelling uses its last lexical transition, not an earlier wrong spelling. Timings remain estimates from native word ends; no acoustic/paint ground truth.",
+          "nativeMaximumSeconds": 0.7737678474094736,
+          "nativeOverThree": 0,
+          "referenceMatchedWords": 141,
+          "referenceWords": 141,
+          "substitutions": 0,
+          "wordErrorRate": 0.0,
+          "wordErrors": 0
+        },
+        "cpuSeconds": 21.630898,
+        "iteration": 1,
+        "maximumProcessingSeconds": 0.10651599999982864,
+        "maximumQueueSeconds": 0.10779970837756991,
+        "maximumSeconds": 0.7737678474094736,
+        "mode": "baseline",
+        "overThree": 0,
+        "wallSeconds": 60.801861416664906
+      },
+      {
+        "accuracy": {
+          "correctSpellingOverThree": 0,
+          "deletions": 0,
+          "finalCorrectSpellingMaximumSeconds": 0.7760875206021609,
+          "firstAppearanceMaximumSeconds": 0.7760875206021609,
+          "insertions": 0,
+          "measurement": "Reference-matched words only; omitted/wrong words counted as errors. Correct spelling uses its last lexical transition, not an earlier wrong spelling. Timings remain estimates from native word ends; no acoustic/paint ground truth.",
+          "nativeMaximumSeconds": 0.7760875206021609,
+          "nativeOverThree": 0,
+          "referenceMatchedWords": 141,
+          "referenceWords": 141,
+          "substitutions": 0,
+          "wordErrorRate": 0.0,
+          "wordErrors": 0
+        },
+        "cpuSeconds": 16.839667,
+        "iteration": 1,
+        "maximumProcessingSeconds": 0.11249891668558121,
+        "maximumQueueSeconds": 0.11922537500504404,
+        "maximumSeconds": 0.7760875206021609,
+        "mode": "sleep",
+        "overThree": 0,
+        "wallSeconds": 60.76695420825854
+      },
+      {
+        "accuracy": {
+          "correctSpellingOverThree": 0,
+          "deletions": 0,
+          "finalCorrectSpellingMaximumSeconds": 0.7750859788665565,
+          "firstAppearanceMaximumSeconds": 0.7750859788665565,
+          "insertions": 0,
+          "measurement": "Reference-matched words only; omitted/wrong words counted as errors. Correct spelling uses its last lexical transition, not an earlier wrong spelling. Timings remain estimates from native word ends; no acoustic/paint ground truth.",
+          "nativeMaximumSeconds": 0.7750859788665565,
+          "nativeOverThree": 0,
+          "referenceMatchedWords": 141,
+          "referenceWords": 141,
+          "substitutions": 0,
+          "wordErrorRate": 0.0,
+          "wordErrors": 0
+        },
+        "cpuSeconds": 17.037272,
+        "iteration": 2,
+        "maximumProcessingSeconds": 0.11343391658738256,
+        "maximumQueueSeconds": 0.12001191673334688,
+        "maximumSeconds": 0.7750859788665565,
+        "mode": "sleep",
+        "overThree": 0,
+        "wallSeconds": 60.77751562499907
+      },
+      {
+        "accuracy": {
+          "correctSpellingOverThree": 0,
+          "deletions": 0,
+          "finalCorrectSpellingMaximumSeconds": 0.7738924566237273,
+          "firstAppearanceMaximumSeconds": 0.7738924566237273,
+          "insertions": 0,
+          "measurement": "Reference-matched words only; omitted/wrong words counted as errors. Correct spelling uses its last lexical transition, not an earlier wrong spelling. Timings remain estimates from native word ends; no acoustic/paint ground truth.",
+          "nativeMaximumSeconds": 0.7738924566237273,
+          "nativeOverThree": 0,
+          "referenceMatchedWords": 141,
+          "referenceWords": 141,
+          "substitutions": 0,
+          "wordErrorRate": 0.0,
+          "wordErrors": 0
+        },
+        "cpuSeconds": 20.896553,
+        "iteration": 2,
+        "maximumProcessingSeconds": 0.11023674998432398,
+        "maximumQueueSeconds": 0.11660474992822856,
+        "maximumSeconds": 0.7738924566237273,
+        "mode": "baseline",
+        "overThree": 0,
+        "wallSeconds": 60.76267562492285
+      }
+    ]
+  },
+  "twoHourRetestThisVersion": false,
+  "version": "0.5.1 / build 9"
+}

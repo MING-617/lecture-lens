@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 
 enum Benchmark {
     struct Report: Codable {
@@ -22,6 +23,16 @@ enum Benchmark {
         let firstDisplayMaximumSeconds: Double
         let correctionMaximumSeconds: Double
         let correctionCount: Int
+        // Optional so reports from earlier versions remain decodable.
+        let activeCPUSeconds: Double?
+        let activeWallSeconds: Double?
+        let cpuWaitingMode: String?
+    }
+    private static func cpuSeconds() -> Double? {
+        var usage = rusage()
+        guard getrusage(RUSAGE_SELF, &usage) == 0 else { return nil }
+        return Double(usage.ru_utime.tv_sec) + Double(usage.ru_stime.tv_sec)
+            + Double(usage.ru_utime.tv_usec + usage.ru_stime.tv_usec) / 1_000_000
     }
     @MainActor static func run(arguments: [String]) async -> Int32 {
         func option(_ name: String) -> String? {
@@ -38,7 +49,13 @@ enum Benchmark {
         session.enhancementPaths = Int(option("--paths") ?? "2") ?? 2
         session.enhancementScore = Float(option("--score") ?? "0.5") ?? 0.5
         var enhanced = false
-        session.onEnhancement = { active, _ in enhanced = active }
+        var activeCPUStart: Double?, activeWallStart: Double?
+        session.onEnhancement = { active, _ in
+            enhanced = active
+            // Measure streaming and finalization, excluding model loading.
+            activeCPUStart = cpuSeconds()
+            activeWallStart = ProcessInfo.processInfo.systemUptime
+        }
         var events: [RecognitionEvent] = [], errors: [String] = []
         var tracker = StreamingLatencyTracker()
         var queueWait = 0.0, processing = 0.0
@@ -51,6 +68,8 @@ enum Benchmark {
             try await session.streamFile(url: URL(fileURLWithPath: input), localeID: "en", contextualTerms: vocabulary)
             await session.finish()
         } catch { errors.append(error.localizedDescription); await session.cancel() }
+        let activeCPUEnd = cpuSeconds(), activeWallEnd = ProcessInfo.processInfo.systemUptime
+        let model = session.modelDirectory ?? Bundle.main.resourceURL?.appendingPathComponent("StreamingEnglish")
         let samples = tracker.samples.sorted()
         func percentile(_ p: Double) -> Double { samples.isEmpty ? 0 : samples[min(samples.count - 1, Int(Double(samples.count - 1) * p))] }
         let report = Report(version: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "development",
@@ -60,7 +79,10 @@ enum Benchmark {
                             p50Seconds: percentile(0.5), p95Seconds: percentile(0.95), overTwoSeconds: tracker.overTwo, overThreeSeconds: tracker.overLimit,
                             durationSeconds: ProcessInfo.processInfo.systemUptime - start, maximumQueueWaitSeconds: queueWait, maximumProcessingSeconds: processing,
                             transcript: events.last?.text ?? "", errors: errors, enhancementActive: enhanced,
-                            firstDisplayMaximumSeconds: tracker.firstDisplayMaximum, correctionMaximumSeconds: tracker.correctionMaximum, correctionCount: tracker.corrections)
+                            firstDisplayMaximumSeconds: tracker.firstDisplayMaximum, correctionMaximumSeconds: tracker.correctionMaximum, correctionCount: tracker.corrections,
+                            activeCPUSeconds: activeCPUStart.flatMap { begin in activeCPUEnd.map { $0 - begin } },
+                            activeWallSeconds: activeWallStart.map { activeWallEnd - $0 },
+                            cpuWaitingMode: model.map { StreamingDecoder.cpuProvider(model: $0.path) == "cpu" ? "default" : "sleep" })
         do {
             let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             try encoder.encode(report).write(to: URL(fileURLWithPath: output), options: .atomic)

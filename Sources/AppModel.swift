@@ -141,7 +141,9 @@ import CoreAudio
         session.onLevel = { [weak self] rms, audioEnd, _ in
             guard let self, self.generation == token, !self.stopping else { return }
             let now = ProcessInfo.processInfo.systemUptime
-            if now - self.lastMeterPublish > 0.1 { self.currentAudioEnd = audioEnd; self.meter = min(1, rms * 12); self.lastMeterPublish = now }
+            // Caption delivery stays immediate; only the strength indicator
+            // and hint-expiry clock need this slower refresh.
+            if now - self.lastMeterPublish > 0.25 { self.currentAudioEnd = audioEnd; self.meter = min(1, rms * 12); self.lastMeterPublish = now }
         }
         session.onVoice = { [weak self] detected in
             guard let self, self.generation == token, !self.stopping else { return }
@@ -184,12 +186,16 @@ import CoreAudio
     }
     private func checkDelay() {
         guard running else { return }
+        let next: (stalled: Bool, status: String)
         switch health.state(at: ProcessInfo.processInfo.systemUptime) {
-        case .interrupted: interrupt("麦克风超过 3 秒没有输入，本次字幕已停止。请检查麦克风后重新开始。")
-        case .noText: stalled = true; status = "检测到人声，但超过 3 秒没有新字幕 · 请检查收音"
-        case .waiting: stalled = false; status = "正在听 · 等待英文讲话"
-        case .speaking: stalled = false; status = "正在听 · 英文实时字幕"
+        case .interrupted: interrupt("麦克风超过 3 秒没有输入，本次字幕已停止。请检查麦克风后重新开始。"); return
+        case .noText: next = (true, "检测到人声，但超过 3 秒没有新字幕 · 请检查收音")
+        case .waiting: next = (false, "正在听 · 等待英文讲话")
+        case .speaking: next = (false, "正在听 · 英文实时字幕")
         }
+        // @Published emits even when an assignment repeats the same value.
+        if stalled != next.stalled { stalled = next.stalled }
+        if status != next.status { status = next.status }
     }
     func requestStop(after action: StopAction = .session) {
         guard hasActiveSession else { perform(action); return }

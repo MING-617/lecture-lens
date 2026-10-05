@@ -2,7 +2,7 @@
 
 原生 macOS 英文实时字幕软件。用于线下听英文课：直接点击“开始”，看英文字幕；遇到已有词表中的专业词时，自动提示中文释义和课件出处。无需选择课程或章节。
 
-当前版本：**0.5.0 / build 8**。英文识别使用 Nemotron English 0.6B 560ms int8 和固定的 sherpa-onnx 源码提交 `3df7ada`，全部在本机处理，无需 API key。Silero VAD 只用于收音状态提示，不裁掉识别音频。
+当前版本：**0.5.1 / build 9**。英文识别使用 Nemotron English 0.6B 560ms int8 和固定的 sherpa-onnx 源码提交 `3df7ada`，全部在本机处理，无需 API key。Silero VAD 只用于收音状态提示，不裁掉识别音频。
 
 ## 使用
 
@@ -30,6 +30,8 @@ python3 Scripts/fetch-dependencies.py
 
 `Vendor/SherpaOnnx/bounded-revisions.patch` 在连续解码中约束较早词片的改写，修订窗口为 1.6 秒；模型不会按段重置，延迟读数也不会截断。这能避免很久之后反复改写，但已经固定的早期误听也可能保留。增强默认使用两条路径、权重 0.5，配置在 `Resources/recognition-settings.json`。
 
+0.5.1 让 ONNX Runtime 的辅助线程在等待时休眠，并减少音量指示及未变化状态的刷新。模型仍使用两个 CPU 线程，英文字幕立即更新；所有声音仍送入识别，专业词增强和保存继续工作。可选 `Resources/StreamingEnglish/cpu-runtime.conf` 缺失或损坏时，安全回退原 CPU 设置。
+
 下载和恢复会检查源码／模型／补丁及头文件校验和；每个本地构建另存二进制校验收据。运行库的参考二进制哈希来自此设备，其他构建位置生成的 Mach-O 哈希可能不同。依赖及缓存不提交到 Git。第三方许可证保存在 `Resources/Licenses/`。
 
 构建结果默认位于仓库上一级的 `Lecture Lens.zip`。可通过 `LECTURELENS_ARCHIVE` 指定其他 zip 路径。当前是本机临时签名的个人应用，未经过 Apple 公证；更新签名后 macOS 可能再次请求麦克风授权。
@@ -52,7 +54,7 @@ LECTURELENS_MOODLE_DIR='/path/to/Moodle课程资料' ./build.sh
 ./Scripts/test.sh
 ```
 
-此命令检查术语匹配、首次及修订延迟、拆词／合词／增删词、保存和导出同步、会话停止、旧回调隔离、普通及增强输入积压保护，以及增强词表损坏时的降级。测试启用 Swift 断言，生成的文字留在被忽略的 `.cache/tests/`。
+此命令检查术语匹配、首次及修订延迟、拆词／合词／增删词、保存和导出同步、会话停止、旧回调隔离、普通及增强输入积压保护，以及增强词表和可选 CPU 配置损坏时的降级。测试启用 Swift 断言，生成的文字留在被忽略的 `.cache/tests/`。
 
 词汇对比测试使用自写句子和 macOS 合成语音，包含独立句子、全词表、普通词、15dB 噪声、长停顿和纯静音；音频和原始事件报告留在本地缓存：
 
@@ -67,5 +69,7 @@ python3 Scripts/vocabulary-metrics.py Tests/Fixtures/caption-corpus/holdout.txt 
 ```
 
 快速参数测试的模拟时序不作为真实输入延迟的证明。对照文本检查遗漏和误词；正确拼写的延迟单独计算，不能用先出现的错误字幕替代。0.5.0 的验收记录见 [新版验证记录](docs/VALIDATION-0.5.md)。
+
+0.5.1 的 CPU 对照、准确率与延迟见 [省电改动验证](docs/VALIDATION-0.5.1.md)。`--benchmark` 另记录从模型就绪到完成释放的进程 CPU 用时与实际经过时间；旧报告仍可读取。`Scripts/compare-cpu.py --help` 提供顺序 A/B/B/A 的对照入口。CPU 用时反映计算工作量，不能换算成电池续航提升比例。
 
 历史验证包括两小时实时节奏输入和实际扬声器到麦克风测试，见 [验证记录](docs/VALIDATION.md)。目标是持续跟上并控制在 2–3 秒以内；测得延迟基于模型词片时间戳估计，遗漏词不计入，未测量屏幕绘制。真实教室后排、回声、老师口音和多人讲话仍需现场检查，不能保证所有单词正确或每个词都在 3 秒内出现。
