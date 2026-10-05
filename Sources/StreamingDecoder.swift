@@ -7,7 +7,8 @@ final class StreamingDecoder {
     private var strings: [UnsafeMutablePointer<CChar>] = []
     private var parser = StreamingWords()
     let enhanced: Bool
-    init(model: String, contextualTerms: [String] = [], paths: Int = 2, score: Float = 1) throws {
+    init(model: String, contextualTerms: [String] = [], paths: Int = 2, score: Float = 1,
+         threads: Int = 2, provider: String = "cpu") throws {
         var pool: [UnsafeMutablePointer<CChar>] = []
         var retained = false
         defer { if !retained { for p in pool { free(p) } } }
@@ -18,7 +19,11 @@ final class StreamingDecoder {
         config.model_config.transducer.decoder = c(model + "/decoder.int8.onnx")
         config.model_config.transducer.joiner = c(model + "/joiner.int8.onnx")
         config.model_config.tokens = c(model + "/tokens.txt")
-        config.model_config.num_threads = 2; config.model_config.provider = c(Self.cpuProvider(model: model))
+        config.model_config.num_threads = Int32(threads == 1 ? 1 : 2)
+        let cpu = Self.cpuProvider(model: model)
+        // Core ML is an experimental benchmark route, not an acceleration
+        // guarantee: unsupported operators may still run on the CPU.
+        config.model_config.provider = c(provider == "coreml" ? "coreml" + cpu.dropFirst(3) : cpu)
         let phrases = RecognitionVocabulary.phrases(contextualTerms)
         let vocabulary = model + "/bpe.vocab"
         enhanced = !phrases.isEmpty && Self.validVocabulary(vocabulary, tokens: model + "/tokens.txt")

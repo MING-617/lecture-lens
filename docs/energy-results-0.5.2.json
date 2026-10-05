@@ -1,0 +1,704 @@
+{
+  "build": 10,
+  "cancellationRegression": "Actual background native initialization cancelled, worker released, zero audio callbacks",
+  "conditions": {
+    "conditions-noise": {
+      "allFinalTranscriptsIdentical": true,
+      "cpuEnergyReductionFraction": {
+        "baseline": 0.0,
+        "two_background": 0.4835290895709633
+      },
+      "means": {
+        "baseline": {
+          "cpuEnergyNanojoules": 45532004878,
+          "cpuSeconds": 18.418707,
+          "performanceCoreFraction": 0.8644014365143246
+        },
+        "two_background": {
+          "cpuEnergyNanojoules": 23515956013,
+          "cpuSeconds": 30.782175000000002,
+          "performanceCoreFraction": 0.3047199790876753
+        }
+      },
+      "method": "Serial, paced recognition comparisons on Apple Silicon.\n\nCPU energy is the kernel's per-task CPU energy counter (nanojoules), not\nwhole-app/whole-machine battery use. Model initialization is excluded.\nKeep raw audio, words and event reports local; publish only summary metrics.\n",
+      "order": [
+        "baseline",
+        "two_background"
+      ],
+      "runs": [
+        {
+          "accepted": true,
+          "accuracy": {
+            "correctSpellingOverThree": 0,
+            "deletions": 1,
+            "finalCorrectSpellingMaximumSeconds": 0.7898114020517113,
+            "firstAppearanceMaximumSeconds": 0.7898114020517113,
+            "insertions": 0,
+            "measurement": "Reference-matched words only; omitted/wrong words counted as errors. Correct spelling uses its last lexical transition, not an earlier wrong spelling. Timings remain estimates from native word ends; no acoustic/paint ground truth.",
+            "nativeMaximumSeconds": 0.923126012976283,
+            "nativeOverThree": 0,
+            "referenceMatchedWords": 137,
+            "referenceWords": 141,
+            "substitutions": 3,
+            "wordErrorRate": 0.028368794326241134,
+            "wordErrors": 4
+          },
+          "cpuEnergyNanojoules": 45532004878,
+          "cpuSeconds": 18.418707,
+          "interruptWakeups": 603,
+          "maximumProcessingSeconds": 0.14875308331102133,
+          "maximumQueueSeconds": 0.1546469583408907,
+          "maximumSeconds": 0.923126012976283,
+          "name": "baseline-1",
+          "overThree": 0,
+          "performanceCoreFraction": 0.8644014365143246,
+          "profile": "baseline",
+          "runtimeErrors": [],
+          "sampleCount": 140,
+          "singleCorePercent": 30.2949279284568,
+          "wallSeconds": 60.79798916669097
+        },
+        {
+          "accepted": true,
+          "accuracy": {
+            "correctSpellingOverThree": 0,
+            "deletions": 1,
+            "finalCorrectSpellingMaximumSeconds": 0.8749936362309398,
+            "firstAppearanceMaximumSeconds": 0.8749936362309398,
+            "insertions": 0,
+            "measurement": "Reference-matched words only; omitted/wrong words counted as errors. Correct spelling uses its last lexical transition, not an earlier wrong spelling. Timings remain estimates from native word ends; no acoustic/paint ground truth.",
+            "nativeMaximumSeconds": 0.9733942629117536,
+            "nativeOverThree": 0,
+            "referenceMatchedWords": 137,
+            "referenceWords": 141,
+            "substitutions": 3,
+            "wordErrorRate": 0.028368794326241134,
+            "wordErrors": 4
+          },
+          "cpuEnergyNanojoules": 23515956013,
+          "cpuSeconds": 30.782175000000002,
+          "interruptWakeups": 605,
+          "maximumProcessingSeconds": 0.24820333323441446,
+          "maximumQueueSeconds": 0.25851083325687796,
+          "maximumSeconds": 0.9733942629117536,
+          "name": "two_background-1",
+          "overThree": 0,
+          "performanceCoreFraction": 0.3047199790876753,
+          "profile": "two_background",
+          "runtimeErrors": [],
+          "sampleCount": 140,
+          "singleCorePercent": 50.4962777125286,
+          "wallSeconds": 60.95929520833306
+        }
+      ]
+    },
+    "conditions-pauses": {
+      "allFinalTranscriptsIdentical": true,
+      "cpuEnergyReductionFraction": {
+        "baseline": 0.0,
+        "two_background": 0.4854276980674479
+      },
+      "means": {
+        "baseline": {
+          "cpuEnergyNanojoules": 70709709610,
+          "cpuSeconds": 28.141381000000003,
+          "performanceCoreFraction": 0.8561725290852745
+        },
+        "two_background": {
+          "cpuEnergyNanojoules": 36385258043,
+          "cpuSeconds": 45.923644,
+          "performanceCoreFraction": 0.30011685306602587
+        }
+      },
+      "method": "Serial, paced recognition comparisons on Apple Silicon.\n\nCPU energy is the kernel's per-task CPU energy counter (nanojoules), not\nwhole-app/whole-machine battery use. Model initialization is excluded.\nKeep raw audio, words and event reports local; publish only summary metrics.\n",
+      "order": [
+        "baseline",
+        "two_background"
+      ],
+      "runs": [
+        {
+          "accepted": true,
+          "accuracy": {
+            "correctSpellingOverThree": 0,
+            "deletions": 2,
+            "finalCorrectSpellingMaximumSeconds": 0.7897568473871814,
+            "firstAppearanceMaximumSeconds": 0.7897568473871814,
+            "insertions": 0,
+            "measurement": "Reference-matched words only; omitted/wrong words counted as errors. Correct spelling uses its last lexical transition, not an earlier wrong spelling. Timings remain estimates from native word ends; no acoustic/paint ground truth.",
+            "nativeMaximumSeconds": 0.7897568473871814,
+            "nativeOverThree": 0,
+            "referenceMatchedWords": 138,
+            "referenceWords": 141,
+            "substitutions": 1,
+            "wordErrorRate": 0.02127659574468085,
+            "wordErrors": 3
+          },
+          "cpuEnergyNanojoules": 70709709610,
+          "cpuSeconds": 28.141381000000003,
+          "interruptWakeups": 951,
+          "maximumProcessingSeconds": 0.11551449995022267,
+          "maximumQueueSeconds": 0.12391145841684192,
+          "maximumSeconds": 0.7897568473871814,
+          "name": "baseline-1",
+          "overThree": 0,
+          "performanceCoreFraction": 0.8561725290852745,
+          "profile": "baseline",
+          "runtimeErrors": [],
+          "sampleCount": 139,
+          "singleCorePercent": 29.373640223181688,
+          "wallSeconds": 95.804880791693
+        },
+        {
+          "accepted": true,
+          "accuracy": {
+            "correctSpellingOverThree": 0,
+            "deletions": 2,
+            "finalCorrectSpellingMaximumSeconds": 0.8666082927538099,
+            "firstAppearanceMaximumSeconds": 0.8660775164188816,
+            "insertions": 0,
+            "measurement": "Reference-matched words only; omitted/wrong words counted as errors. Correct spelling uses its last lexical transition, not an earlier wrong spelling. Timings remain estimates from native word ends; no acoustic/paint ground truth.",
+            "nativeMaximumSeconds": 0.8666082927538099,
+            "nativeOverThree": 0,
+            "referenceMatchedWords": 138,
+            "referenceWords": 141,
+            "substitutions": 1,
+            "wordErrorRate": 0.02127659574468085,
+            "wordErrors": 3
+          },
+          "cpuEnergyNanojoules": 36385258043,
+          "cpuSeconds": 45.923644,
+          "interruptWakeups": 955,
+          "maximumProcessingSeconds": 0.2477012083400041,
+          "maximumQueueSeconds": 0.2563580833375454,
+          "maximumSeconds": 0.8666082927538099,
+          "name": "two_background-1",
+          "overThree": 0,
+          "performanceCoreFraction": 0.30011685306602587,
+          "profile": "two_background",
+          "runtimeErrors": [],
+          "sampleCount": 139,
+          "singleCorePercent": 47.83967376386786,
+          "wallSeconds": 95.99489375005942
+        }
+      ]
+    },
+    "conditions-silence": {
+      "allFinalTranscriptsIdentical": true,
+      "cpuEnergyReductionFraction": {
+        "baseline": 0.0,
+        "two_background": 0.47043658941807787
+      },
+      "means": {
+        "baseline": {
+          "cpuEnergyNanojoules": 23197416384,
+          "cpuSeconds": 9.173909,
+          "performanceCoreFraction": 0.8658291858043262
+        },
+        "two_background": {
+          "cpuEnergyNanojoules": 12284502937,
+          "cpuSeconds": 15.192345,
+          "performanceCoreFraction": 0.3089040708036463
+        }
+      },
+      "method": "Serial, paced recognition comparisons on Apple Silicon.\n\nCPU energy is the kernel's per-task CPU energy counter (nanojoules), not\nwhole-app/whole-machine battery use. Model initialization is excluded.\nKeep raw audio, words and event reports local; publish only summary metrics.\n",
+      "order": [
+        "baseline",
+        "two_background"
+      ],
+      "runs": [
+        {
+          "accepted": true,
+          "cpuEnergyNanojoules": 23197416384,
+          "cpuSeconds": 9.173909,
+          "interruptWakeups": 297,
+          "maximumProcessingSeconds": 0.1493407083908096,
+          "maximumQueueSeconds": 0.1591372083639726,
+          "maximumSeconds": 0,
+          "name": "baseline-1",
+          "overThree": 0,
+          "performanceCoreFraction": 0.8658291858043262,
+          "profile": "baseline",
+          "runtimeErrors": [],
+          "sampleCount": 0,
+          "singleCorePercent": 30.393019238835958,
+          "wallSeconds": 30.184263458359055
+        },
+        {
+          "accepted": true,
+          "cpuEnergyNanojoules": 12284502937,
+          "cpuSeconds": 15.192345,
+          "interruptWakeups": 296,
+          "maximumProcessingSeconds": 0.2407121250871569,
+          "maximumQueueSeconds": 0.25100866658613086,
+          "maximumSeconds": 0,
+          "name": "two_background-1",
+          "overThree": 0,
+          "performanceCoreFraction": 0.3089040708036463,
+          "profile": "two_background",
+          "runtimeErrors": [],
+          "sampleCount": 0,
+          "singleCorePercent": 50.042372028645175,
+          "wallSeconds": 30.358962583355606
+        }
+      ]
+    }
+  },
+  "delivery": {
+    "GUI": "Installed bundle launched; floating/main layout switched and Start remained visible; microphone kept stopped",
+    "backup": "Lecture Lens 0.5.1 backup before energy update.zip",
+    "build": 10,
+    "bundleFilesMatched": 21,
+    "installedPath": "/Applications/Lecture Lens.app",
+    "userFilesUnchanged": 8,
+    "version": "0.5.2"
+  },
+  "device": {
+    "architecture": "arm64",
+    "efficiencyCores": 6,
+    "logicalCPUs": 10,
+    "memoryGB": 24,
+    "model": "Apple M4 / Mac16,1",
+    "os": "macOS 26.6.2",
+    "performanceCores": 4,
+    "power": "AC charging; Low Power Mode off"
+  },
+  "energyCounterImplementation": "https://github.com/apple-oss-distributions/xnu/blob/main/osfmk/kern/task.c",
+  "energyCounterSource": "https://github.com/apple-oss-distributions/xnu/blob/main/doc/observability/recount.md",
+  "independentValidation": {
+    "all-terms-background": {
+      "accuracy": {
+        "correctSpellingOverThree": 0,
+        "deletions": 1,
+        "finalCorrectSpellingMaximumSeconds": 1.1902902102610255,
+        "firstAppearanceMaximumSeconds": 1.1902902102610255,
+        "insertions": 2,
+        "measurement": "Reference-matched words only; omitted/wrong words counted as errors. Correct spelling uses its last lexical transition, not an earlier wrong spelling. Timings remain estimates from native word ends; no acoustic/paint ground truth.",
+        "nativeMaximumSeconds": 1.1902902102610255,
+        "nativeOverThree": 0,
+        "referenceMatchedWords": 1808,
+        "referenceWords": 1818,
+        "substitutions": 9,
+        "wordErrorRate": 0.006600660066006601,
+        "wordErrors": 12
+      },
+      "activeCPUEnergyNanojoules": 236043948307,
+      "activeCPUSeconds": 340.51663,
+      "activePerformanceCoreFraction": 0.2716978977907758,
+      "activeWallSeconds": 620.1098734582774,
+      "case": "all-terms-background",
+      "enhancementActive": true,
+      "errors": [],
+      "exitCode": 0,
+      "finalTranscriptMatchesOld": true,
+      "maximumProcessingSeconds": 0.6238187083508819,
+      "maximumQueueWaitSeconds": 0.6303038332844153,
+      "maximumSeconds": 1.1902902102610255,
+      "overThreeSeconds": 0,
+      "requestedProvider": "cpu",
+      "requestedQoS": "background",
+      "totalWallSeconds": 625.3957968750037
+    },
+    "human-background": {
+      "accuracy": {
+        "correctSpellingOverThree": 0,
+        "deletions": 2,
+        "finalCorrectSpellingMaximumSeconds": 1.2368712961487347,
+        "firstAppearanceMaximumSeconds": 1.2368712961487347,
+        "insertions": 0,
+        "measurement": "Reference-matched words only; omitted/wrong words counted as errors. Correct spelling uses its last lexical transition, not an earlier wrong spelling. Timings remain estimates from native word ends; no acoustic/paint ground truth.",
+        "nativeMaximumSeconds": 1.2368712961487347,
+        "nativeOverThree": 0,
+        "referenceMatchedWords": 815,
+        "referenceWords": 824,
+        "substitutions": 7,
+        "wordErrorRate": 0.010922330097087379,
+        "wordErrors": 9
+      },
+      "activeCPUEnergyNanojoules": 131490299181,
+      "activeCPUSeconds": 178.824695,
+      "activePerformanceCoreFraction": 0.2843027136567961,
+      "activeWallSeconds": 350.2836416249629,
+      "case": "human-background",
+      "enhancementActive": true,
+      "errors": [],
+      "exitCode": 0,
+      "finalTranscriptMatchesOld": true,
+      "maximumProcessingSeconds": 0.23992770828772336,
+      "maximumQueueWaitSeconds": 0.24958099995274097,
+      "maximumSeconds": 1.2368712961487347,
+      "overThreeSeconds": 0,
+      "requestedProvider": "cpu",
+      "requestedQoS": "background",
+      "totalWallSeconds": 354.94848250004
+    }
+  },
+  "initialCandidates": {
+    "background-1": {
+      "accuracy": {
+        "correctSpellingOverThree": 1,
+        "deletions": 69,
+        "finalCorrectSpellingMaximumSeconds": 31.811333248233424,
+        "firstAppearanceMaximumSeconds": 31.811333248233424,
+        "insertions": 0,
+        "measurement": "Reference-matched words only; omitted/wrong words counted as errors. Correct spelling uses its last lexical transition, not an earlier wrong spelling. Timings remain estimates from native word ends; no acoustic/paint ground truth.",
+        "nativeMaximumSeconds": 31.811333248233424,
+        "nativeOverThree": 1,
+        "referenceMatchedWords": 72,
+        "referenceWords": 141,
+        "substitutions": 0,
+        "wordErrorRate": 0.48936170212765956,
+        "wordErrors": 69
+      },
+      "activeCPUEnergyNanojoules": 4686454858,
+      "activeCPUSeconds": 20.445418999999998,
+      "activeInterruptWakeups": 607,
+      "activePerformanceCoreFraction": 0.0030138643531710933,
+      "activeWallSeconds": 61.39866741665173,
+      "correctionMaximumSeconds": 1.0815718057146313,
+      "enhancementActive": true,
+      "errors": [
+        "音频处理未跟上，已停止以避免积压旧字幕。请关闭占用 CPU 的程序后重新开始。"
+      ],
+      "firstDisplayMaximumSeconds": 31.811333248233424,
+      "inferenceThreads": 1,
+      "maximumProcessingSeconds": 1.0538944583386183,
+      "maximumQueueWaitSeconds": 1.066130333347246,
+      "maximumSeconds": 31.811333248233424,
+      "overThreeSeconds": 1,
+      "requestedProvider": "cpu",
+      "requestedSchedulingClass": "background"
+    },
+    "baseline-1": {
+      "accuracy": {
+        "correctSpellingOverThree": 0,
+        "deletions": 0,
+        "finalCorrectSpellingMaximumSeconds": 0.782149198888801,
+        "firstAppearanceMaximumSeconds": 0.782149198888801,
+        "insertions": 0,
+        "measurement": "Reference-matched words only; omitted/wrong words counted as errors. Correct spelling uses its last lexical transition, not an earlier wrong spelling. Timings remain estimates from native word ends; no acoustic/paint ground truth.",
+        "nativeMaximumSeconds": 0.782149198888801,
+        "nativeOverThree": 0,
+        "referenceMatchedWords": 141,
+        "referenceWords": 141,
+        "substitutions": 0,
+        "wordErrorRate": 0.0,
+        "wordErrors": 0
+      },
+      "activeCPUEnergyNanojoules": 42184516996,
+      "activeCPUSeconds": 16.755126,
+      "activeInterruptWakeups": 606,
+      "activePerformanceCoreFraction": 0.8272890811122325,
+      "activeWallSeconds": 60.7644183334196,
+      "correctionMaximumSeconds": 0.7745388891361671,
+      "enhancementActive": true,
+      "errors": [],
+      "firstDisplayMaximumSeconds": 0.782149198888801,
+      "inferenceThreads": 2,
+      "maximumProcessingSeconds": 0.10480500000994653,
+      "maximumQueueWaitSeconds": 0.11426200007554144,
+      "maximumSeconds": 0.782149198888801,
+      "overThreeSeconds": 0,
+      "requestedProvider": "cpu",
+      "requestedSchedulingClass": "userInitiated"
+    },
+    "single-1": {
+      "accuracy": {
+        "correctSpellingOverThree": 0,
+        "deletions": 0,
+        "finalCorrectSpellingMaximumSeconds": 0.8101221649721282,
+        "firstAppearanceMaximumSeconds": 0.8101221649721282,
+        "insertions": 0,
+        "measurement": "Reference-matched words only; omitted/wrong words counted as errors. Correct spelling uses its last lexical transition, not an earlier wrong spelling. Timings remain estimates from native word ends; no acoustic/paint ground truth.",
+        "nativeMaximumSeconds": 0.8101221649721282,
+        "nativeOverThree": 0,
+        "referenceMatchedWords": 141,
+        "referenceWords": 141,
+        "substitutions": 0,
+        "wordErrorRate": 0.0,
+        "wordErrors": 0
+      },
+      "activeCPUEnergyNanojoules": 52037993710,
+      "activeCPUSeconds": 13.797001999999999,
+      "activeInterruptWakeups": 608,
+      "activePerformanceCoreFraction": 0.8495561726206099,
+      "activeWallSeconds": 60.83816237503197,
+      "correctionMaximumSeconds": 0.8099254724383371,
+      "enhancementActive": true,
+      "errors": [],
+      "firstDisplayMaximumSeconds": 0.8101221649721282,
+      "inferenceThreads": 1,
+      "maximumProcessingSeconds": 0.14029366662725806,
+      "maximumQueueWaitSeconds": 0.1407366250641644,
+      "maximumSeconds": 0.8101221649721282,
+      "overThreeSeconds": 0,
+      "requestedProvider": "cpu",
+      "requestedSchedulingClass": "userInitiated"
+    },
+    "utility-1": {
+      "accuracy": {
+        "correctSpellingOverThree": 0,
+        "deletions": 0,
+        "finalCorrectSpellingMaximumSeconds": 0.8420355522120371,
+        "firstAppearanceMaximumSeconds": 0.8420355522120371,
+        "insertions": 0,
+        "measurement": "Reference-matched words only; omitted/wrong words counted as errors. Correct spelling uses its last lexical transition, not an earlier wrong spelling. Timings remain estimates from native word ends; no acoustic/paint ground truth.",
+        "nativeMaximumSeconds": 0.8420355522120371,
+        "nativeOverThree": 0,
+        "referenceMatchedWords": 141,
+        "referenceWords": 141,
+        "substitutions": 0,
+        "wordErrorRate": 0.0,
+        "wordErrors": 0
+      },
+      "activeCPUEnergyNanojoules": 51268170776,
+      "activeCPUSeconds": 13.955869,
+      "activeInterruptWakeups": 608,
+      "activePerformanceCoreFraction": 0.8348932328465702,
+      "activeWallSeconds": 60.875093083363026,
+      "correctionMaximumSeconds": 0.8086102223768847,
+      "enhancementActive": true,
+      "errors": [],
+      "firstDisplayMaximumSeconds": 0.8420355522120371,
+      "inferenceThreads": 1,
+      "maximumProcessingSeconds": 0.19562304171267897,
+      "maximumQueueWaitSeconds": 0.20203658333048224,
+      "maximumSeconds": 0.8420355522120371,
+      "overThreeSeconds": 0,
+      "requestedProvider": "cpu",
+      "requestedSchedulingClass": "utility"
+    }
+  },
+  "inputSHA256": {
+    "all-terms-holdout.wav": "33bf57105ca60a7c1d1cb5a17b4dc74bc473003c4dc74c8f77a5dcb2f200a0c1",
+    "ordinary-human.wav": "1ccdd73a2956888805a4acda2939f45e2e7bae3409bec882daf9ac78d6d09fb5",
+    "silence.wav": "40abc924dc63f75aafb2400bb99fd66741e22eb9ff2450973a18db53a06286ac",
+    "tuning-noise.wav": "81c03b79e16665973e05eef571b1a9377f3e1416933addc9128941932eed913a",
+    "tuning-pauses.wav": "fb775bcced0c36d15e497a21ab03442e0614aac3fe374573a9a888ffd435731e",
+    "tuning.wav": "3721379e9ff0b49898b3fa6c43cf89bb7bdc0b5af674db8ead346917ec718dac"
+  },
+  "legacyReportCompatibility": "Actual 0.5.0 report decoded with new optional fields absent",
+  "limits": [
+    "Not a new two-hour or eight-hour test",
+    "No actual battery discharge measurement; computer charging",
+    "No classroom/accent/room-acoustic guarantee",
+    "CLI input uses production converter/recognizer/result callbacks; SwiftUI UI refresh and actual microphone energy are excluded",
+    "A test-only caffeinate -i assertion prevents idle sleep only until suite process ends; no permanent power setting changes"
+  ],
+  "measurement": "Same executable, weights and vocabulary, serial real-time input. Process user+system CPU time and TASK_POWER_INFO_V2 CPU energy nanojoules from model ready to finish, callback drain and worker release. Initialization excluded. CPU energy is kernel attribution, not external power-meter, audio/display/DRAM consumption or whole-Mac battery-life improvement. Foreground/background scheduling can increase CPU seconds while lowering CPU energy. First and final-correct spelling delays retain all >3s samples; native word ends are estimates, not annotated acoustic ground truth or display paint.",
+  "rejectedCoreML": {
+    "accuracy": {
+      "correctSpellingOverThree": 0,
+      "deletions": 1,
+      "finalCorrectSpellingMaximumSeconds": 1.187457170295529,
+      "firstAppearanceMaximumSeconds": 1.187457170295529,
+      "insertions": 0,
+      "measurement": "Reference-matched words only; omitted/wrong words counted as errors. Correct spelling uses its last lexical transition, not an earlier wrong spelling. Timings remain estimates from native word ends; no acoustic/paint ground truth.",
+      "nativeMaximumSeconds": 1.187457170295529,
+      "nativeOverThree": 0,
+      "referenceMatchedWords": 139,
+      "referenceWords": 141,
+      "substitutions": 1,
+      "wordErrorRate": 0.014184397163120567,
+      "wordErrors": 2
+    },
+    "activeCPUEnergyNanojoules": 73190476554,
+    "activeCPUSeconds": 25.304345,
+    "activePerformanceCoreFraction": 0.8792705766694147,
+    "activeWallSeconds": 61.2528874167474,
+    "case": "coreml-probe",
+    "enhancementActive": true,
+    "errors": [],
+    "exitCode": 0,
+    "maximumProcessingSeconds": 0.7238772083073854,
+    "maximumQueueWaitSeconds": 0.7274605417624116,
+    "maximumSeconds": 1.187457170295529,
+    "overThreeSeconds": 0,
+    "requestedProvider": "coreml",
+    "requestedQoS": "userInitiated",
+    "totalWallSeconds": 66.3229401659919
+  },
+  "repeatedSpeechComparison": {
+    "allFinalTranscriptsIdentical": true,
+    "cpuEnergyReductionFraction": {
+      "baseline": 0.0,
+      "two_background": 0.44050479148567523
+    },
+    "means": {
+      "baseline": {
+        "cpuEnergyNanojoules": 41483268546,
+        "cpuSeconds": 16.883519,
+        "performanceCoreFraction": 0.81888672996928
+      },
+      "two_background": {
+        "cpuEnergyNanojoules": 23209689985,
+        "cpuSeconds": 30.029722999999997,
+        "performanceCoreFraction": 0.2964580913924494
+      }
+    },
+    "method": "Serial, paced recognition comparisons on Apple Silicon.\n\nCPU energy is the kernel's per-task CPU energy counter (nanojoules), not\nwhole-app/whole-machine battery use. Model initialization is excluded.\nKeep raw audio, words and event reports local; publish only summary metrics.\n",
+    "order": [
+      "two_background",
+      "baseline",
+      "two_background",
+      "baseline"
+    ],
+    "runs": [
+      {
+        "accepted": true,
+        "accuracy": {
+          "correctSpellingOverThree": 0,
+          "deletions": 0,
+          "finalCorrectSpellingMaximumSeconds": 0.876152252969332,
+          "firstAppearanceMaximumSeconds": 0.876152252969332,
+          "insertions": 0,
+          "measurement": "Reference-matched words only; omitted/wrong words counted as errors. Correct spelling uses its last lexical transition, not an earlier wrong spelling. Timings remain estimates from native word ends; no acoustic/paint ground truth.",
+          "nativeMaximumSeconds": 0.876152252969332,
+          "nativeOverThree": 0,
+          "referenceMatchedWords": 141,
+          "referenceWords": 141,
+          "substitutions": 0,
+          "wordErrorRate": 0.0,
+          "wordErrors": 0
+        },
+        "cpuEnergyNanojoules": 23190385005,
+        "cpuSeconds": 30.053362,
+        "interruptWakeups": 606,
+        "maximumProcessingSeconds": 0.20417820836883038,
+        "maximumQueueSeconds": 0.20820833335164934,
+        "maximumSeconds": 0.876152252969332,
+        "name": "two_background-1",
+        "overThree": 0,
+        "performanceCoreFraction": 0.2977976414602192,
+        "profile": "two_background",
+        "runtimeErrors": [],
+        "sampleCount": 141,
+        "singleCorePercent": 49.30639160420503,
+        "wallSeconds": 60.952264041639864
+      },
+      {
+        "accepted": true,
+        "accuracy": {
+          "correctSpellingOverThree": 0,
+          "deletions": 0,
+          "finalCorrectSpellingMaximumSeconds": 0.7778277112683281,
+          "firstAppearanceMaximumSeconds": 0.7778277112683281,
+          "insertions": 0,
+          "measurement": "Reference-matched words only; omitted/wrong words counted as errors. Correct spelling uses its last lexical transition, not an earlier wrong spelling. Timings remain estimates from native word ends; no acoustic/paint ground truth.",
+          "nativeMaximumSeconds": 0.7778277112683281,
+          "nativeOverThree": 0,
+          "referenceMatchedWords": 141,
+          "referenceWords": 141,
+          "substitutions": 0,
+          "wordErrorRate": 0.0,
+          "wordErrors": 0
+        },
+        "cpuEnergyNanojoules": 41825330494,
+        "cpuSeconds": 16.796422999999997,
+        "interruptWakeups": 606,
+        "maximumProcessingSeconds": 0.10972449998371303,
+        "maximumQueueSeconds": 0.1158598333131522,
+        "maximumSeconds": 0.7778277112683281,
+        "name": "baseline-1",
+        "overThree": 0,
+        "performanceCoreFraction": 0.8291759897179107,
+        "profile": "baseline",
+        "runtimeErrors": [],
+        "sampleCount": 141,
+        "singleCorePercent": 27.63470535348986,
+        "wallSeconds": 60.780177625012584
+      },
+      {
+        "accepted": true,
+        "accuracy": {
+          "correctSpellingOverThree": 0,
+          "deletions": 0,
+          "finalCorrectSpellingMaximumSeconds": 0.8827411455148848,
+          "firstAppearanceMaximumSeconds": 0.8827411455148848,
+          "insertions": 0,
+          "measurement": "Reference-matched words only; omitted/wrong words counted as errors. Correct spelling uses its last lexical transition, not an earlier wrong spelling. Timings remain estimates from native word ends; no acoustic/paint ground truth.",
+          "nativeMaximumSeconds": 0.8827411455148848,
+          "nativeOverThree": 0,
+          "referenceMatchedWords": 141,
+          "referenceWords": 141,
+          "substitutions": 0,
+          "wordErrorRate": 0.0,
+          "wordErrors": 0
+        },
+        "cpuEnergyNanojoules": 23228994965,
+        "cpuSeconds": 30.006083999999998,
+        "interruptWakeups": 608,
+        "maximumProcessingSeconds": 0.20000633329618722,
+        "maximumQueueSeconds": 0.20343758340459317,
+        "maximumSeconds": 0.8827411455148848,
+        "name": "two_background-2",
+        "overThree": 0,
+        "performanceCoreFraction": 0.2951185413246795,
+        "profile": "two_background",
+        "runtimeErrors": [],
+        "sampleCount": 141,
+        "singleCorePercent": 49.23631408472806,
+        "wallSeconds": 60.942994124954566
+      },
+      {
+        "accepted": true,
+        "accuracy": {
+          "correctSpellingOverThree": 0,
+          "deletions": 0,
+          "finalCorrectSpellingMaximumSeconds": 0.8059740945044922,
+          "firstAppearanceMaximumSeconds": 0.8059740945044922,
+          "insertions": 0,
+          "measurement": "Reference-matched words only; omitted/wrong words counted as errors. Correct spelling uses its last lexical transition, not an earlier wrong spelling. Timings remain estimates from native word ends; no acoustic/paint ground truth.",
+          "nativeMaximumSeconds": 0.8059740945044922,
+          "nativeOverThree": 0,
+          "referenceMatchedWords": 141,
+          "referenceWords": 141,
+          "substitutions": 0,
+          "wordErrorRate": 0.0,
+          "wordErrors": 0
+        },
+        "cpuEnergyNanojoules": 41141206598,
+        "cpuSeconds": 16.970615000000002,
+        "interruptWakeups": 607,
+        "maximumProcessingSeconds": 0.11581304168794304,
+        "maximumQueueSeconds": 0.12596550001762807,
+        "maximumSeconds": 0.8059740945044922,
+        "name": "baseline-2",
+        "overThree": 0,
+        "performanceCoreFraction": 0.8085974702206493,
+        "profile": "baseline",
+        "runtimeErrors": [],
+        "sampleCount": 141,
+        "singleCorePercent": 27.92138630282565,
+        "wallSeconds": 60.77998712507542
+      }
+    ]
+  },
+  "selectedProfile": {
+    "hotwordScore": 0.5,
+    "paths": 2,
+    "provider": "cpu",
+    "qos": "background",
+    "threads": 2
+  },
+  "signedReleaseDefaultCheck": {
+    "activeCPUEnergyNanojoules": 23477700094,
+    "activeCPUSeconds": 30.134420000000002,
+    "activeWallSeconds": 60.9430292500183,
+    "cpuWaitingMode": "sleep",
+    "enhancementActive": true,
+    "errors": [],
+    "inferenceThreads": 2,
+    "maximumProcessingSeconds": 0.4018592917127535,
+    "maximumQueueWaitSeconds": 0.4064010833390057,
+    "maximumSeconds": 0.9896340423310193,
+    "overThreeSeconds": 0,
+    "referenceWords": 141,
+    "requestedProvider": "cpu",
+    "requestedSchedulingClass": "background",
+    "sampleCount": 141,
+    "version": "0.5.2",
+    "wordErrors": 0
+  },
+  "testDate": "2026-10-05",
+  "version": "0.5.2"
+}

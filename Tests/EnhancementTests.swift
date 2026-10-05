@@ -44,5 +44,16 @@ import AVFoundation
             await session.cancel()
         }
         print("PASS: missing/malformed optional CPU config safely falls back; valid sleep settings initialize the native runtime; all retain hotword recognition")
+        let cancelled = SpeechSession(); cancelled.modelDirectory = source
+        var initialized = false, audioCallbacks = 0
+        cancelled.onEnhancement = { _, _ in initialized = true }
+        cancelled.onLevel = { _, _, _ in audioCallbacks += 1 }
+        let preparing = Task { try await cancelled.prepare(inputFormat: format, contextualTerms: ["foreign key"]) }
+        preparing.cancel()
+        do { try await preparing.value; assertionFailure("cancelled startup must not install a worker") }
+        catch is CancellationError { }
+        await cancelled.cancel()
+        assert(initialized && audioCallbacks == 0, "native background initialization must finish safely without starting cancelled audio")
+        print("PASS: cancelled background initialization releases the native worker without starting audio")
     }
 }

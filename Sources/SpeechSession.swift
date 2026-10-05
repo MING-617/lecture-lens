@@ -47,8 +47,15 @@ enum SessionError: LocalizedError {
     }
 }
 
+// submit() fills this private copy before handing it to the serial worker.
+// Neither the callback's original buffer nor the queued copy is mutated later.
+private struct OwnedAudioBuffer: @unchecked Sendable {
+    let value: AVAudioPCMBuffer
+}
+
 final class AudioFeeder: @unchecked Sendable {
-    let queue = DispatchQueue(label: "com.ming.lecturelens.streaming", qos: .userInitiated)
+    let queue: DispatchQueue
+    private let schedulingClass: DispatchQoS.QoSClass
     private let converter: AVAudioConverter
     private let format: AVAudioFormat
     private let decoder: StreamingDecoder
@@ -72,11 +79,14 @@ final class AudioFeeder: @unchecked Sendable {
     init(input: AVAudioFormat, model: URL, onLevel: @escaping @Sendable (Double, Double, Double) -> Void,
          onResult: @escaping @Sendable (RecognitionEvent) -> Void, onError: @escaping @Sendable (Error) -> Void,
          onPerformance: @escaping @Sendable (Double, Double) -> Void, onVoice: @escaping @Sendable (Bool) -> Void = { _ in },
-         contextualTerms: [String] = [], paths: Int = 2, score: Float = 1) throws {
+         contextualTerms: [String] = [], paths: Int = 2, score: Float = 1,
+         threads: Int = 2, provider: String = "cpu", qos: DispatchQoS.QoSClass = .background) throws {
         guard let format = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 16000, channels: 1, interleaved: false),
               let converter = AVAudioConverter(from: input, to: format) else { throw SessionError.format }
         self.converter = converter; self.format = format
-        self.decoder = try StreamingDecoder(model: model.path, contextualTerms: contextualTerms, paths: paths, score: score)
+        self.schedulingClass = qos
+        self.queue = DispatchQueue(label: "com.ming.lecturelens.streaming", qos: DispatchQoS(qosClass: qos, relativePriority: 0))
+        self.decoder = try StreamingDecoder(model: model.path, contextualTerms: contextualTerms, paths: paths, score: score, threads: threads, provider: provider)
         self.voice = try VoiceActivity(model: model.appendingPathComponent("silero_vad.onnx"))
         self.onLevel = onLevel; self.onResult = onResult; self.onError = onError; self.onPerformance = onPerformance; self.onVoice = onVoice
     }
@@ -97,7 +107,9 @@ final class AudioFeeder: @unchecked Sendable {
         for i in 0..<source.count {
             if let src = source[i].mData, let dst = target[i].mData { memcpy(dst, src, Int(source[i].mDataByteSize)) }
         }
-        queue.async { [self] in
+        let owned = OwnedAudioBuffer(value: copy)
+        enqueue { [self] in
+            let copy = owned.value
             defer { release(duration) }
             guard !lock.withLock({ cancelled }) else { return }
             if originValue == nil { originValue = uptime }
@@ -108,7 +120,7 @@ final class AudioFeeder: @unchecked Sendable {
             var provided = false, error: NSError?
             let status = converter.convert(to: output, error: &error) { _, inputStatus in
                 if provided { inputStatus.pointee = .noDataNow; return nil }
-                provided = true; inputStatus.pointee = .haveData; return copy
+                provided = true; inputStatus.pointee = .haveData; return owned.value
             }
             guard status != .error else { onError(SessionError.conversion(error?.localizedDescription ?? "unknown")); return }
             guard output.frameLength > 0, let channel = output.floatChannelData?[0] else { return }
@@ -119,6 +131,15 @@ final class AudioFeeder: @unchecked Sendable {
             onLevel(rms, end, origin); onVoice(voice.accept(values))
             if decoder.feed(values) { publish(final: false, origin: origin, end: end) }
             onPerformance(max(0, started - uptime), ProcessInfo.processInfo.systemUptime - started)
+        }
+    }
+    private func enqueue(_ work: @escaping @Sendable () -> Void) {
+        if schedulingClass == .userInitiated { queue.async(execute: work) }
+        else {
+            // Audio callbacks and UI callers must not promote inference work
+            // back to performance priority. The bounded queue still reports
+            // overload instead of accumulating delayed lecture audio.
+            queue.async(qos: DispatchQoS(qosClass: schedulingClass, relativePriority: 0), flags: .enforceQoS, execute: work)
         }
     }
     private func release(_ duration: Double) { lock.lock(); pendingSeconds = max(0, pendingSeconds - duration); lock.unlock() }
@@ -140,7 +161,7 @@ final class AudioFeeder: @unchecked Sendable {
     func finish(cancel: Bool = false) async {
         lock.withLock { accepting = false; cancelled = cancel }
         await withCheckedContinuation { continuation in
-            queue.async { [self] in
+            enqueue { [self] in
                 if !cancel, let origin = originValue { decoder.finish(); publish(final: true, origin: origin, end: Double(samples) / 16000) }
                 continuation.resume()
             }
@@ -164,6 +185,11 @@ final class AudioFeeder: @unchecked Sendable {
     var onEnhancement: ((Bool, String?) -> Void)?
     var enhancementPaths = 2
     var enhancementScore: Float = 1
+    // Two threads on the energy-conscious queue passed paced comparisons.
+    // Keep input intact and retain the same bounded backlog protection.
+    var inferenceThreads = 2
+    var inferenceProvider = "cpu"
+    var inferenceQoS: DispatchQoS.QoSClass = .background
 
     func prepare(inputFormat: AVAudioFormat, contextualTerms: [String] = []) async throws {
         guard let model = modelDirectory ?? Bundle.main.resourceURL?.appendingPathComponent("StreamingEnglish"),
@@ -183,16 +209,30 @@ final class AudioFeeder: @unchecked Sendable {
         let performance: @Sendable (Double, Double) -> Void = { [weak self] wait, decode in DispatchQueue.main.async { self?.onPerformance?(wait, decode) } }
         let speech: @Sendable (Bool) -> Void = { [weak self] detected in DispatchQueue.main.async { self?.onVoice?(detected) } }
         let paths = enhancementPaths, score = enhancementScore
-        let (worker, fallback) = try await Task.detached(priority: .userInitiated) {
+        let threads = inferenceThreads, provider = inferenceProvider, qos = inferenceQoS
+        let initialize: @Sendable () throws -> (AudioFeeder, String?) = {
             do {
-                let worker = try AudioFeeder(input: inputFormat, model: model, onLevel: level, onResult: result, onError: failure, onPerformance: performance, onVoice: speech, contextualTerms: contextualTerms, paths: paths, score: score)
+                let worker = try AudioFeeder(input: inputFormat, model: model, onLevel: level, onResult: result, onError: failure, onPerformance: performance, onVoice: speech, contextualTerms: contextualTerms, paths: paths, score: score, threads: threads, provider: provider, qos: qos)
                 return (worker, Optional<String>.none)
             } catch {
                 guard !contextualTerms.isEmpty else { throw error }
-                let normal = try AudioFeeder(input: inputFormat, model: model, onLevel: level, onResult: result, onError: failure, onPerformance: performance, onVoice: speech)
+                let normal = try AudioFeeder(input: inputFormat, model: model, onLevel: level, onResult: result, onError: failure, onPerformance: performance, onVoice: speech, threads: threads, provider: provider, qos: qos)
                 return (normal, Optional("专业词增强初始化失败，正在使用普通英文识别。"))
             }
-        }.value
+        }
+        let worker: AudioFeeder, fallback: String?
+        if qos == .userInitiated {
+            (worker, fallback) = try await Task.detached(priority: .userInitiated, operation: initialize).value
+        } else {
+            // A high-priority task awaiting a detached task can escalate it.
+            // Create native model workers on the requested GCD queue instead.
+            (worker, fallback) = try await withCheckedThrowingContinuation { continuation in
+                DispatchQueue.global(qos: qos).async(qos: DispatchQoS(qosClass: qos, relativePriority: 0), flags: .enforceQoS) {
+                    do { continuation.resume(returning: try initialize()) }
+                    catch { continuation.resume(throwing: error) }
+                }
+            }
+        }
         onEnhancement?(worker.enhanced, fallback ?? (!contextualTerms.isEmpty && !worker.enhanced ? "专业词增强未能启用，正在使用普通英文识别。" : nil))
         try Task.checkCancellation(); feeder = worker
     }
