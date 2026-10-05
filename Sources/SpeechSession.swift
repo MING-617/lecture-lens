@@ -94,7 +94,9 @@ final class AudioFeeder: @unchecked Sendable {
         let duration = Double(buffer.frameLength) / buffer.format.sampleRate
         lock.lock()
         guard accepting else { lock.unlock(); return }
-        guard pendingSeconds + duration <= 1.0 else {
+        // Absorb a brief scheduling interruption without abandoning words.
+        // The backlog remains bounded below the three-second caption budget.
+        guard pendingSeconds + duration <= 1.5 else {
             accepting = false
             let report = !overflowReported; overflowReported = true
             lock.unlock(); if report { onError(SessionError.queueOverflow) }; return
@@ -139,7 +141,9 @@ final class AudioFeeder: @unchecked Sendable {
             // Audio callbacks and UI callers must not promote inference work
             // back to performance priority. The bounded queue still reports
             // overload instead of accumulating delayed lecture audio.
-            queue.async(qos: DispatchQoS(qosClass: schedulingClass, relativePriority: 0), flags: .enforceQoS, execute: work)
+            let qos = schedulingClass == .background && lock.withLock({ pendingSeconds >= 0.5 })
+                ? DispatchQoS.QoSClass.utility : schedulingClass
+            queue.async(qos: DispatchQoS(qosClass: qos, relativePriority: 0), flags: .enforceQoS, execute: work)
         }
     }
     private func release(_ duration: Double) { lock.lock(); pendingSeconds = max(0, pendingSeconds - duration); lock.unlock() }

@@ -48,7 +48,9 @@ final class StreamingDecoder {
         let expected = "SessionConfig.session.intra_op.allow_spinning=0\nSessionConfig.session.inter_op.allow_spinning=0\n"
         // The native provider parser terminates on a malformed config file.
         // Optional power settings must be validated before entering it.
-        guard let contents = try? String(contentsOfFile: path, encoding: .utf8), contents == expected else { return "cpu" }
+        guard let contents = try? String(contentsOfFile: path, encoding: .utf8),
+              contents == expected || contents == expected + "LectureLensWorkerQoS=background\n" ||
+              contents == expected + "LectureLensWorkerQoS=utility\n" else { return "cpu" }
         return "cpu:" + path
     }
     private static func validVocabulary(_ path: String, tokens: String) -> Bool {

@@ -28,3 +28,80 @@
    r.tokens = std::move(best.ys);
    r.timestamps = std::move(best.timestamps);
    r.ys_probs = std::move(best.ys_probs);
+--- a/sherpa-onnx/csrc/session.cc
++++ b/sherpa-onnx/csrc/session.cc
+@@ -11,6 +11,12 @@
+ #include <unordered_map>
+ #include <utility>
+ #include <vector>
++#include <new>
++
++#if defined(__APPLE__)
++#include <pthread.h>
++#include <pthread/qos.h>
++#endif
+ 
+ #include "sherpa-onnx/csrc/file-utils.h"
+ #include "sherpa-onnx/csrc/macros.h"
+@@ -136,6 +142,41 @@
+   }
+ }
+ 
++#if defined(__APPLE__)
++namespace {
++const qos_class_t kLectureLensBackground = QOS_CLASS_BACKGROUND;
++const qos_class_t kLectureLensUtility = QOS_CLASS_UTILITY;
++struct LectureLensWorker {
++  pthread_t thread;
++  OrtThreadWorkerFn function;
++  void *argument;
++};
++OrtCustomThreadHandle CreateLectureLensWorker(void *options, OrtThreadWorkerFn function,
++                                              void *argument) {
++  auto worker = new (std::nothrow) LectureLensWorker{nullptr, function, argument};
++  if (!worker) return nullptr;
++  pthread_attr_t attributes;
++  if (pthread_attr_init(&attributes) != 0) { delete worker; return nullptr; }
++  int status = pthread_attr_set_qos_class_np(&attributes, *static_cast<const qos_class_t *>(options), 0);
++  if (status == 0) {
++    status = pthread_create(&worker->thread, &attributes, [](void *value) -> void * {
++      auto w = static_cast<LectureLensWorker *>(value);
++      w->function(w->argument);
++      return nullptr;
++    }, worker);
++  }
++  pthread_attr_destroy(&attributes);
++  if (status != 0) { delete worker; return nullptr; }
++  return reinterpret_cast<OrtCustomThreadHandle>(worker);
++}
++void JoinLectureLensWorker(OrtCustomThreadHandle handle) {
++  auto worker = const_cast<LectureLensWorker *>(reinterpret_cast<const LectureLensWorker *>(handle));
++  pthread_join(worker->thread, nullptr);
++  delete worker;
++}
++}  // namespace
++#endif
++
+ Ort::SessionOptions GetSessionOptionsImpl(
+     int32_t num_threads, const std::string &provider_str,
+     const ProviderConfig *provider_config /*= nullptr*/) {
+@@ -150,6 +191,19 @@
+   sess_opts.SetIntraOpNumThreads(num_threads);
+ 
+   sess_opts.SetInterOpNumThreads(num_threads);
++#if defined(__APPLE__)
++  auto worker_qos = config.find("LectureLensWorkerQoS");
++  if (worker_qos != config.end()) {
++    if (worker_qos->second == "background" || worker_qos->second == "utility") {
++      sess_opts.SetCustomThreadCreationOptions(const_cast<qos_class_t *>(
++          worker_qos->second == "background" ? &kLectureLensBackground : &kLectureLensUtility));
++      sess_opts.SetCustomCreateThreadFn(CreateLectureLensWorker);
++      sess_opts.SetCustomJoinThreadFn(JoinLectureLensWorker);
++    }
++    config.erase(worker_qos);
++  }
++#endif
++
+ 
+   std::vector<std::string> available_providers = Ort::GetAvailableProviders();
+   std::ostringstream os;

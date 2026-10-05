@@ -13,7 +13,10 @@ import CoreAudio
     @Published var stopping = false
     @Published var meter = 0.0
     @Published var latency: Double?
-    @Published var tracker = StreamingLatencyTracker()
+    // Caption/latency publications already refresh the UI on every result.
+    // Publishing this large internal value too would copy its old word array
+    // through the property wrapper before each in-place suffix update.
+    private(set) var tracker = StreamingLatencyTracker()
     @Published var maximumQueueWait = 0.0
     @Published var maximumDecodeTime = 0.0
     @Published var stalled = false

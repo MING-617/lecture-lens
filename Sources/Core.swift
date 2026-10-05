@@ -12,7 +12,10 @@ struct Caption: Identifiable, Equatable {
 /// Replace overlapping provisional results instead of appending every hypothesis.
 struct CaptionHistory {
     private(set) var captions: [Caption] = []
+    private var streamStart: Double?
+    private var firstStreamGroup = 0
     mutating func accept(_ caption: Caption) {
+        streamStart = nil
         guard !caption.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         captions.removeAll { old in
             let overlaps = old.start < caption.end - 0.005 && caption.start < old.end - 0.005
@@ -23,19 +26,29 @@ struct CaptionHistory {
         // A bounded in-memory history keeps a long lecture from growing without limit.
         if captions.count > 300 { captions.removeFirst(captions.count - 300) }
     }
-    mutating func clear() { captions = [] }
+    mutating func clear() { captions = []; streamStart = nil; firstStreamGroup = 0 }
     mutating func acceptStreaming(_ event: RecognitionEvent) {
-        guard !event.words.isEmpty else { captions = []; return }
+        guard !event.words.isEmpty else { clear(); return }
         let count = 12, total = (event.words.count + count - 1) / count
-        var lines: [Caption] = []
-        for group in max(0, total - 300)..<total {
+        let first = max(0, total - 300)
+        var keep = 0
+        if streamStart == event.start, first >= firstStreamGroup,
+           let changed = event.changedFromWord, changed >= 0, changed <= event.words.count {
+            let dropped = min(captions.count, first - firstStreamGroup)
+            if dropped > 0 { captions.removeFirst(dropped) }
+            // The previous last line may become complete even if its words
+            // didn't change. Rebuild it as well as the revised suffix.
+            keep = max(0, min(changed / count - first, min(captions.count - 1, total - first - 1)))
+        }
+        if keep < captions.count { captions.removeSubrange(keep...) }
+        for group in (first + keep)..<total {
             let begin = group * count, end = min(begin + count, event.words.count)
             let words = event.words[begin..<end]
-            lines.append(Caption(start: words.first!.start, end: words.last!.end,
-                                 text: words.map(\.text).joined(separator: " "), isFinal: event.isFinal || group < total - 1,
-                                 stableID: "stream-\(event.start)-\(group)"))
+            captions.append(Caption(start: words.first!.start, end: words.last!.end,
+                                    text: words.map(\.text).joined(separator: " "), isFinal: event.isFinal || group < total - 1,
+                                    stableID: "stream-\(event.start)-\(group)"))
         }
-        captions = lines
+        streamStart = event.start; firstStreamGroup = first
     }
 }
 
@@ -325,7 +338,8 @@ struct StreamingLatencyTracker {
         if event.changedFromWord == nil {
             while unchanged < min(previous.count, event.words.count), previous[unchanged].word == event.words[unchanged] { unchanged += 1 }
         }
-        var next = Array(previous.prefix(unchanged))
+        var tail: [Seen] = []
+        tail.reserveCapacity(event.words.count - unchanged)
         var oldByTime: [Int: [Seen]] = [:]
         for old in previous.dropFirst(unchanged) { oldByTime[Int((old.word.start * 1000).rounded()), default: []].append(old) }
         var used: Set<Int> = []
@@ -343,20 +357,24 @@ struct StreamingLatencyTracker {
                 if seen.spelling != text { seen.spelling = text; seen.spellingSeen = event.received; seen.revised = true }
             } else { seen = Seen(id: nextID, word: word, spelling: text, firstSeen: event.received, spellingSeen: event.received); nextID += 1 }
             used.insert(seen.id); seen.word = word
-            next.append(seen)
+            tail.append(seen)
         }
+        let previousCount = previous.count
+        // Reconcile using the old suffix first, then replace only that suffix.
+        // Keeping the unchanged prefix avoids copying every old measurement
+        // on each new word during a long lecture.
+        previous.replaceSubrange(unchanged..., with: tail)
         var added: [Double] = []
         // Only the changed tail plus the previously unfinished last word can
         // need a sample. Revisions never erase already measured slow results.
-        let sampleStart = min(complete, max(0, min(unchanged, previous.count - 1)))
+        let sampleStart = min(complete, max(0, min(unchanged, previousCount - 1)))
         for i in sampleStart..<complete {
-            guard next[i].sampled != next[i].spelling else { continue }
-            let lag = max(0, next[i].spellingSeen - next[i].word.end)
-            firstDisplayMaximum = max(firstDisplayMaximum, next[i].firstSeen - next[i].word.end)
-            if next[i].revised { correctionMaximum = max(correctionMaximum, lag); corrections += 1 }
-            next[i].sampled = next[i].spelling; added.append(lag)
+            guard previous[i].sampled != previous[i].spelling else { continue }
+            let lag = max(0, previous[i].spellingSeen - previous[i].word.end)
+            firstDisplayMaximum = max(firstDisplayMaximum, previous[i].firstSeen - previous[i].word.end)
+            if previous[i].revised { correctionMaximum = max(correctionMaximum, lag); corrections += 1 }
+            previous[i].sampled = previous[i].spelling; added.append(lag)
         }
-        previous = next
         for lag in added {
             sampleCount += 1
             maximum = max(maximum, lag)
@@ -397,12 +415,12 @@ struct LatencyTracker {
     private var pending: [RecognitionEvent] = []
     private var finalized: Set<String> = []
 
+    private static let wordPattern = try! NSRegularExpression(pattern: "[\\p{L}\\p{N}]+(?:['’][\\p{L}]+)?")
+    private static let numbers = ["zero": "0", "one": "1", "two": "2", "three": "3", "four": "4", "five": "5", "six": "6", "seven": "7", "eight": "8", "nine": "9", "ten": "10"]
+
     static func tokens(_ text: String) -> [String] {
-        let pattern = "[\\p{L}\\p{N}]+(?:['’][\\p{L}]+)?"
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
         let source = text.lowercased() as NSString
-        let numbers = ["zero": "0", "one": "1", "two": "2", "three": "3", "four": "4", "five": "5", "six": "6", "seven": "7", "eight": "8", "nine": "9", "ten": "10"]
-        return regex.matches(in: source as String, range: NSRange(location: 0, length: source.length)).map {
+        return wordPattern.matches(in: source as String, range: NSRange(location: 0, length: source.length)).map {
             let token = source.substring(with: $0.range)
             // "two" -> "2" is formatting, not a late recognition correction.
             return numbers[token] ?? token

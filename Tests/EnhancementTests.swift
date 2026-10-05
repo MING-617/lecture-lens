@@ -30,20 +30,23 @@ import AVFoundation
         }
         print("PASS: missing and incompatible hotword vocabulary safely use ordinary recognition with a visible notice; valid vocabulary enables native enhancement")
         let runtime = temporary.appendingPathComponent("cpu-runtime.conf")
-        for state in 0..<3 {
+        for state in 0..<6 {
             if state == 1 { try Data("SessionConfig.not-valid\n".utf8).write(to: runtime) }
             if state == 2 {
                 try Data("SessionConfig.session.intra_op.allow_spinning=0\nSessionConfig.session.inter_op.allow_spinning=0\n".utf8).write(to: runtime)
             }
+            if state == 3 { try Data("SessionConfig.session.intra_op.allow_spinning=0\nSessionConfig.session.inter_op.allow_spinning=0\nLectureLensWorkerQoS=background\n".utf8).write(to: runtime) }
+            if state == 4 { try Data("SessionConfig.session.intra_op.allow_spinning=0\nSessionConfig.session.inter_op.allow_spinning=0\nLectureLensWorkerQoS=invalid\n".utf8).write(to: runtime) }
+            if state == 5 { try Data("SessionConfig.session.intra_op.allow_spinning=0\nSessionConfig.session.inter_op.allow_spinning=0\nLectureLensWorkerQoS=utility\n".utf8).write(to: runtime) }
             let session = SpeechSession(); session.modelDirectory = temporary
             var enabled = false
             session.onEnhancement = { active, _ in enabled = active }
             try await session.prepare(inputFormat: format, contextualTerms: ["foreign key", "NumPy"])
             assert(enabled, "optional CPU configuration must never disable hotword recognition")
-            assert((StreamingDecoder.cpuProvider(model: temporary.path) == "cpu") == (state != 2))
+            assert((StreamingDecoder.cpuProvider(model: temporary.path) == "cpu") == (state != 2 && state != 3 && state != 5))
             await session.cancel()
         }
-        print("PASS: missing/malformed optional CPU config safely falls back; valid sleep settings initialize the native runtime; all retain hotword recognition")
+        print("PASS: missing/malformed optional CPU config safely falls back; both legacy sleep and background helper settings initialize; invalid helper QoS falls back; all retain hotword recognition")
         let cancelled = SpeechSession(); cancelled.modelDirectory = source
         var initialized = false, audioCallbacks = 0
         cancelled.onEnhancement = { _, _ in initialized = true }

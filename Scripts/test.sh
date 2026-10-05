@@ -9,6 +9,8 @@ task_flags=(-O -assert-config Debug -swift-version 5 -parse-as-library -target a
 task_link=(-import-objc-header "$task_vendor/c-api.h" -L "$task_vendor" -l sherpa-onnx-c-api -Xlinker -rpath -Xlinker "$task_vendor")
 xcrun swiftc "${task_flags[@]}" "$task_root/Sources/Core.swift" "$task_root/Tests/CoreTests.swift" -o "$task_results/core-tests"
 "$task_results/core-tests" "$task_root/Resources/coursepack.portable.json"
+xcrun swiftc "${task_flags[@]}" "$task_root/Sources/Core.swift" "$task_root/Tests/CaptionEfficiencyTests.swift" -o "$task_results/caption-efficiency-tests"
+"$task_results/caption-efficiency-tests"
 xcrun swiftc "${task_flags[@]}" "${task_link[@]}" "${task_native[@]}" "$task_root/Sources/AppModel.swift" "$task_root/Tests/SessionTests.swift" -o "$task_results/session-tests"
 "$task_results/session-tests" "$task_results/transcripts"
 xcrun swiftc "${task_flags[@]}" "${task_link[@]}" "${task_native[@]}" "$task_root/Tests/AudioQueueTests.swift" -o "$task_results/queue-tests"
