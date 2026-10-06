@@ -2,12 +2,12 @@
 
 原生 macOS 英文实时字幕软件。用于线下听英文课：直接点击“开始”，看英文字幕；遇到已有词表中的专业词时，自动提示中文释义和课件出处。无需选择课程或章节。
 
-当前版本：**0.5.4 / build 12**。英文识别使用 Nemotron English 0.6B 560ms int8 和固定的 sherpa-onnx 源码提交 `3df7ada`，全部在本机处理，无需 API key。Silero VAD 只用于收音状态提示，不裁掉识别音频。
+当前版本：**0.5.5 / build 13**。英文识别使用 Nemotron English 0.6B 560ms int8 和固定的 sherpa-onnx 源码提交 `3df7ada`，全部在本机处理，无需 API key。Silero VAD 只用于收音状态提示，不裁掉识别音频。
 
 ## 使用
 
 - “开始”启动，“停止”请求确认。回车默认继续听课；确认停止才关闭收音并保存。运行中关闭主窗口或退出也需要确认。
-- 完整英文字幕自动保存到 `~/Documents/Lecture Lens 字幕/`，每次开始创建新文件。不保存音频录音。
+- 完整英文字幕自动保存到 `~/Documents/Lecture Lens 字幕/`，每次开始创建新文件。不保存音频录音。上课时先写在本机不同步的 `~/Library/Application Support/LectureLens/Recording/`，点“停止”后整份移入字幕文件夹，避免 iCloud 在上课期间反复上传；若软件意外退出，下次打开或开始时自动移入并注明。
 - 画面最多保留最近 300 行；“字幕文件”定位完整文件，“导出字幕”另存本次全文。
 - “回看”冻结画面，后台继续听；“回到实时”追赶最新字幕。字号可调整，“窗口置顶”方便同时看课件。
 - “悬浮字幕”切换为约 560×240 的小窗，显示最新英文和简短术语提示，自动置顶。顶部空白区域可拖动，边缘可缩放。“返回主界面”恢复之前的窗口尺寸和置顶设置，整个过程共用收音和字幕文件。
@@ -20,7 +20,7 @@
 要求 Apple Silicon Mac、macOS 26 或更新版本、Xcode Command Line Tools（Swift 编译器）及 Python 3.9 或更新版本。Python 仅用于构建工具，安装后的 app 不依赖 Python。
 
 ```sh
-python3 Scripts/fetch-dependencies.py --cache "$HOME/Library/Caches/LectureLens/build-0.5.4"
+python3 Scripts/fetch-dependencies.py --cache "$HOME/Library/Caches/LectureLens/build-0.5.5"
 ./build.sh
 # 安装到“应用程序”可使用：
 ./build.sh --install
@@ -36,9 +36,11 @@ python3 Scripts/fetch-dependencies.py --cache "$HOME/Library/Caches/LectureLens/
 
 0.5.4 修正了课越长越费电的问题：0.5.3 每一步都会重新处理整节课的识别结果，连续 60 分钟后每步解码慢 52%，取结果慢约 20 倍；0.5.4 全程不变，最终英文完全相同。模型改用标准 MLAS 内核，常驻内存从约 1.4 GB 降到约 0.8 GB，CPU 能量和字幕不变。字幕持续变化时跳过仅用于状态提示的静音检测；音量、状态等界面更新合并为每秒约 4 次。
 
+0.5.5 上课时把字幕写在本机不同步的文件夹，停止后再整份移入“文稿 / Lecture Lens 字幕”，所以 iCloud 只上传一次完成的文件，不再在上课期间每几秒上传一次。识别和字幕内容不变。
+
 下载和恢复会检查源码／模型／补丁及头文件校验和；每个本地构建另存二进制校验收据。运行库的参考二进制哈希来自此设备，其他构建位置生成的 Mach-O 哈希可能不同。依赖及缓存不提交到 Git。第三方许可证保存在 `Resources/Licenses/`。
 
-构建结果默认位于仓库上一级的 `Lecture Lens.zip`。可通过 `LECTURELENS_ARCHIVE` 指定其他 zip 路径。当前是本机临时签名的个人应用，未经过 Apple 公证；更新签名后 macOS 可能再次请求麦克风授权。
+构建结果默认位于 `~/LectureLensLocal/installers/Lecture Lens.zip`，不放在可能同步到 iCloud 的“文稿”里。可通过 `LECTURELENS_ARCHIVE` 指定其他 zip 路径。当前是本机临时签名的个人应用，未经过 Apple 公证；更新签名后 macOS 可能再次请求麦克风授权。
 
 ## 课程词表与资料路径
 

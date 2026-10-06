@@ -28,11 +28,19 @@ import Foundation
         let directory = URL(fileURLWithPath: CommandLine.arguments[1])
         var mocks: [MockSession] = []
         let preferences = directory.appendingPathComponent("preferences.json")
-        let model = AppModel(transcriptDirectory: directory, preferenceURL: preferences, makeSession: { let s = MockSession(); mocks.append(s); return s })
+        let staging = directory.appendingPathComponent("staging", isDirectory: true)
+        // A transcript left behind by an unexpected exit is moved on the next start.
+        try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
+        let orphan = staging.appendingPathComponent("orphan.txt")
+        try Data("Lecture Lens · English captions\n\nunfinished words ".utf8).write(to: orphan)
+        let model = AppModel(transcriptDirectory: directory, stagingDirectory: staging, preferenceURL: preferences, makeSession: { let s = MockSession(); mocks.append(s); return s })
         model.terms = [Term(english: "foreign key", chinese: "外键", explanation: "", course: "5076"), Term(english: "Custom Widget", chinese: "自备术语", explanation: "", course: "General")]
         model.known = Set(model.terms.map(\.id)); model.chineseHints = false
         model.start(); try await waitUntil { model.running }
-        let first = mocks[0], firstURL = model.savedURL!
+        let first = mocks[0], stagedURL = model.savedURL!
+        let recovered = try String(contentsOf: directory.appendingPathComponent("orphan.txt"), encoding: .utf8)
+        assert(recovered.contains("unfinished words") && recovered.contains("recovered on next launch") && !FileManager.default.fileExists(atPath: orphan.path))
+        assert(stagedURL.deletingLastPathComponent().standardizedFileURL == staging.standardizedFileURL, "recording writes to the local staging folder")
         assert(first.vocabulary == ["Custom Widget", "foreign key"] && model.enhancementActive, "known words and disabled Chinese hints must still boost English recognition")
         model.setEnhancement(false); assert(model.enhanceTerms, "cannot change the decoder mid-session")
         let words = (0..<4001).map { WordStamp(text: "word\($0)", start: Double($0), end: Double($0)+0.1) }
@@ -49,6 +57,9 @@ import Foundation
         model.requestStop(); model.confirmStop(); assert(first.halted && model.stopping && !model.running)
         try await waitUntil { !model.stopping }
         assert(first.finished && !model.hasActiveSession && model.status.contains("已停止"))
+        let firstURL = model.savedURL!
+        assert(firstURL == directory.appendingPathComponent(stagedURL.lastPathComponent) && !FileManager.default.fileExists(atPath: stagedURL.path),
+               "the finished transcript moves once into the transcript folder")
         let saved = try String(contentsOf: firstURL, encoding: .utf8)
         assert(saved.contains("word0 ") && saved.contains("word4000 "), "archive must include both early words outside the UI and the final unfinished word")
         let count = saved.components(separatedBy: "word").count-1
@@ -75,13 +86,13 @@ import Foundation
         let invalid = directory.appendingPathComponent("not-a-folder")
         try Data("existing file".utf8).write(to: invalid)
         let blockedSession = MockSession()
-        let blocked = AppModel(transcriptDirectory: invalid, preferenceURL: preferences, makeSession: { blockedSession })
+        let blocked = AppModel(transcriptDirectory: invalid, stagingDirectory: staging, preferenceURL: preferences, makeSession: { blockedSession })
         blocked.start(); try await waitUntil { !blocked.preparing }
         assert(!blocked.running && blocked.error != nil && blocked.savedURL == nil)
         let legacy = directory.appendingPathComponent("legacy-preferences.json")
         try Data("{\"terms\":[],\"known\":[],\"version\":4}".utf8).write(to: legacy)
         assert(AppModel(transcriptDirectory: directory, preferenceURL: legacy).enhanceTerms, "legacy preferences default to enhancement enabled")
         print("PASS: all English terms boost recognition independently of Chinese/known settings; setting is immutable while active and persists; layout changes share session; old preferences remain readable")
-        print("PASS: cancel leaves capture active; confirmed stop halts capture and finalizes all 4001 words; restart preserves files; old callbacks isolated; device interruption saves; save-path failure prevents unsafe start")
+        print("PASS: cancel leaves capture active; confirmed stop halts capture and finalizes all 4001 words; restart preserves files; old callbacks isolated; device interruption saves; save-path failure prevents unsafe start; staged recording moves into the transcript folder when finished; orphaned staging files are recovered")
     }
 }

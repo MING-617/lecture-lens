@@ -1,7 +1,9 @@
 #!/bin/zsh
 set -euo pipefail
 task_root=${0:A:h}
-task_archive=${LECTURELENS_ARCHIVE:-"$task_root/../Lecture Lens.zip"}
+# Keep the ~450 MB package outside Documents, which may sync to iCloud.
+task_archive=${LECTURELENS_ARCHIVE:-"$HOME/LectureLensLocal/installers/Lecture Lens.zip"}
+mkdir -p "${task_archive:h}"
 task_stage=$(mktemp -d /private/tmp/lecturelens-build.XXXXXX)
 trap 'rm -rf "$task_stage"' EXIT
 task_stage_app="$task_stage/Lecture Lens.app"

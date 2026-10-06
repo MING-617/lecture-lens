@@ -44,7 +44,7 @@ struct LensView: View {
                     .lineSpacing(8)
                 Text("字幕采用持续流式识别，最新词逐步补齐，前面的词不会等待长句最终校正。延迟根据模型词片时间戳估计，界面不截断超时读数。目标是持续跟上、控制在 2–3 秒以内；准确率和教室收音仍需现场检查。")
                     .font(.callout).foregroundStyle(.secondary)
-                Text("英文模型已内置，音频在本地处理，不写入录音文件；完整英文字幕按每次开始自动保存到“文稿 / Lecture Lens 字幕”。不录制音频。")
+                Text("英文模型已内置，音频在本地处理，不写入录音文件；完整英文字幕按每次开始自动保存：上课时先写在本机，停止后移到“文稿 / Lecture Lens 字幕”。不录制音频。")
                     .font(.callout).foregroundStyle(.secondary)
                 HStack { Spacer(); Button("明白了") { model.showHelp = false }.keyboardShortcut(.defaultAction) }
             }.padding(28).frame(width: 540)

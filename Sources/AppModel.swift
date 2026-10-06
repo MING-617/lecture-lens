@@ -54,6 +54,8 @@ import CoreAudio
     private var health = CaptureHealth()
     private var observers: [NSObjectProtocol] = []
     private let transcriptDirectory: URL
+    // Local, unsynced folder for the transcript being recorded.
+    private let stagingDirectory: URL?
     private let makeSession: @MainActor () -> SpeechSession
     private var session: SpeechSession?
     private var startTask: Task<Void, Never>?
@@ -63,9 +65,12 @@ import CoreAudio
     private let preferenceURL: URL
     private struct Preferences: Codable { var terms: [Term]; var known: Set<String>; var version: Int? = 5; var enhanceTerms: Bool? = nil }
 
-    init(transcriptDirectory: URL? = nil, preferenceURL: URL? = nil, makeSession: @escaping @MainActor () -> SpeechSession = { SpeechSession() }) {
-        self.preferenceURL = preferenceURL ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("LectureLens/preferences.json")
+    init(transcriptDirectory: URL? = nil, stagingDirectory: URL? = nil, preferenceURL: URL? = nil, makeSession: @escaping @MainActor () -> SpeechSession = { SpeechSession() }) {
+        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("LectureLens", isDirectory: true)
+        self.preferenceURL = preferenceURL ?? support.appendingPathComponent("preferences.json")
         self.transcriptDirectory = transcriptDirectory ?? FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("Lecture Lens 字幕", isDirectory: true)
+        // Documents may sync to iCloud. Record locally; move the finished file.
+        self.stagingDirectory = stagingDirectory ?? (transcriptDirectory == nil ? support.appendingPathComponent("Recording", isDirectory: true) : nil)
         self.makeSession = makeSession
         if let url = Bundle.main.url(forResource: "coursepack", withExtension: "json"),
            let data = try? Data(contentsOf: url), let pack = try? JSONDecoder().decode(CoursePack.self, from: data) {
@@ -82,6 +87,7 @@ import CoreAudio
     var hasActiveSession: Bool { running || preparing || stopping }
     func observeSystem() {
         guard observers.isEmpty else { return }
+        recoverTranscripts()
         let center = NSWorkspace.shared.notificationCenter
         observers.append(center.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in self?.interrupt("系统即将睡眠，字幕已停止；唤醒后点击开始即可继续。") }
@@ -92,6 +98,9 @@ import CoreAudio
         observers.append(NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in self?.refreshDevices() }
         })
+    }
+    private func recoverTranscripts() {
+        if let stagingDirectory, !hasActiveSession { TranscriptArchive.recover(staging: stagingDirectory, into: transcriptDirectory) }
     }
     func refreshDevices() {
         devices = InputDevice.list()
@@ -114,6 +123,7 @@ import CoreAudio
 
     func start() {
         guard !hasActiveSession else { return }
+        recoverTranscripts()
         generation = UUID(); let token = generation
         history.clear(); frozen = nil; tracker = StreamingLatencyTracker(); latency = nil
         maximumQueueWait = 0; maximumDecodeTime = 0
@@ -163,7 +173,7 @@ import CoreAudio
         }
         startTask = Task {
             do {
-                let archive = try TranscriptArchive(directory: transcriptDirectory)
+                let archive = try TranscriptArchive(directory: transcriptDirectory, staging: stagingDirectory)
                 self.archive = archive; savedURL = archive.url
                 archive.onError = { [weak self] error in
                     DispatchQueue.main.async {
@@ -184,7 +194,7 @@ import CoreAudio
             } catch {
                 await session.cancel()
                 guard generation == token, !stopping else { return }
-                if let archive { try? await archive.finish(reason: "未开始：" + error.localizedDescription) }
+                if let archive, let moved = try? await archive.finish(reason: "未开始：" + error.localizedDescription) { savedURL = moved }
                 self.session = nil; preparing = false; running = false
                 if !(error is CancellationError) { self.error = error.localizedDescription }
                 status = "未开始 · 可以调整后重试"
@@ -241,7 +251,8 @@ import CoreAudio
             if let event = lastEvent {
                 archive?.accept(RecognitionEvent(received: event.received, start: event.start, end: event.end, text: event.text, isFinal: true, words: event.words))
             }
-            do { try await archive?.finish(reason: reason) } catch { saveFailed = true; self.error = "字幕保存失败：" + error.localizedDescription }
+            do { if let archive { savedURL = try await archive.finish(reason: reason) } }
+            catch { saveFailed = true; self.error = "字幕保存失败：" + error.localizedDescription }
             // Invalidate every old callback before permitting a new session.
             generation = UUID(); session = nil; stopping = false; meter.level = 0; stalled = false; refreshDevices()
             status = saveFailed ? "已停止 · 字幕保存发生错误" : "已停止 · 完整字幕已保存在本地"
