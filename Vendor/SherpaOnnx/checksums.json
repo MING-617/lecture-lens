@@ -2,11 +2,11 @@
   "version": "1.13.8 + NeMo hotwords 3df7ada",
   "files": {
     "libonnxruntime.dylib": "b0613d0ae53199a83b05fa48e169211498e9d40d54beaa372068ebe5ec5b0929",
-    "libsherpa-onnx-c-api.dylib": "c4be88396412e987d601868d8758538aa1bb8a4694728112db022e1984a9ca9f"
+    "libsherpa-onnx-c-api.dylib": "e4d7113c5b3fe152902c8a35e3b622a4c3e96a8bec65837d867d73c91c765560"
   },
-  "header_sha256": "2a1b95084be8fd1deb3228fcad2fd3f7f0258b64582f7402281ec174c7b7f4ce",
+  "header_sha256": "406c5557df0492b67c1a1ce9fd9c2b4bc6003651e3181220609a5d98a9494fef",
   "source_commit": "3df7adacc0d5f140e4e81b746dac0fbeeac16fab",
   "source_url": "https://codeload.github.com/k2-fsa/sherpa-onnx/tar.gz/3df7adacc0d5f140e4e81b746dac0fbeeac16fab",
   "source_sha256": "60dd31fc03d14cc1d11ff42dcc436ff8b9931da1cf3865f6c5f4ecb124724f46",
-  "patch_sha256": "acacd9dbe682fc72b5dfe468793d091a3f4af45d8a9a5fc76ca893bd97f1f80e"
+  "patch_sha256": "b683bd63b273ff816105e9fab4587fcd58015d9f2bb93069bccbc89f0dda7ebe"
 }

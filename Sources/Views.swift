@@ -10,8 +10,10 @@ private let accent = Color(nsColor: NSColor(name: nil) { appearance in
 struct LensView: View {
     @EnvironmentObject var model: AppModel
     var body: some View {
+        // Term detection runs at most once per refresh.
+        let suggestions = model.suggestions
         VStack(spacing: 0) {
-            if model.compact { compactContent } else {
+            if model.compact { compactContent(suggestions) } else {
             header
             Divider()
             controls.padding(.horizontal, 24).padding(.vertical, 14)
@@ -25,7 +27,7 @@ struct LensView: View {
                 }.padding(14).background(Color.orange.opacity(0.09))
             }
             captions
-            if model.chineseHints && !model.suggestions.isEmpty { hints }
+            if !suggestions.isEmpty { hints(suggestions) }
             Divider()
             footer
             }
@@ -57,7 +59,7 @@ struct LensView: View {
         }
     }
 
-    private var compactContent: some View {
+    private func compactContent(_ suggestions: [Term]) -> some View {
         VStack(spacing: 8) {
             HStack(spacing: 12) {
                 Button("返回主界面", systemImage: "arrow.up.left.and.arrow.down.right") { model.toggleCompact() }
@@ -85,8 +87,8 @@ struct LensView: View {
                 .onChange(of: model.history.captions) { _, _ in proxy.scrollTo("compact-bottom", anchor: .bottom) }
                 .onAppear { proxy.scrollTo("compact-bottom", anchor: .bottom) }
             }
-            if model.chineseHints, !model.suggestions.isEmpty {
-                Text(model.suggestions.prefix(2).map { $0.english + "：" + $0.chinese }.joined(separator: " · "))
+            if !suggestions.isEmpty {
+                Text(suggestions.prefix(2).map { $0.english + "：" + $0.chinese }.joined(separator: " · "))
                     .font(.caption).foregroundStyle(Color(nsColor: .systemGreen)).lineLimit(2).frame(maxWidth: .infinity, alignment: .leading)
             }
             HStack {
@@ -171,10 +173,10 @@ struct LensView: View {
             }
         }
     }
-    private var hints: some View {
+    private func hints(_ suggestions: [Term]) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("自动术语提示 · 点击 ⓘ 查看解释和课件出处").font(.caption).foregroundStyle(.secondary)
-            ForEach(model.suggestions) { term in
+            ForEach(suggestions) { term in
                 HStack(alignment: .top, spacing: 10) {
                     Text(term.english).font(.system(size: 15, weight: .semibold)).foregroundStyle(accent)
                     Text(term.chinese).font(.system(size: 15))
@@ -193,10 +195,7 @@ struct LensView: View {
                 Circle().fill(model.running ? accent : Color.secondary.opacity(0.4)).frame(width: 7, height: 7)
                 Text(model.enhancementNotice ?? model.status).font(.caption).foregroundStyle(model.stalled || model.enhancementNotice != nil ? .orange : .secondary).lineLimit(1)
                 if model.running { Text(model.enhancementActive ? "专业词增强" : "普通识别").font(.caption).foregroundStyle(.secondary) }
-                GeometryReader { geometry in
-                    Capsule().fill(accent.opacity(0.13))
-                        .overlay(alignment: .leading) { Capsule().fill(accent).frame(width: max(2, geometry.size.width * model.meter)) }
-                }.frame(width: 60, height: 5).help("麦克风声音强度")
+                MeterBar(meter: model.meter).frame(width: 60, height: 5).help("麦克风声音强度")
                 Spacer()
                 if let delay = model.latency {
                     Text(String(format: "最新词延迟 ≈ %.1f 秒", delay)).font(.caption.monospacedDigit())
@@ -218,6 +217,16 @@ struct LensView: View {
                 Button("导出字幕") { model.exportCaptions() }.disabled(model.savedURL == nil || model.stopping).help("导出本次完整英文字幕")
             }.font(.caption).buttonStyle(.borderless)
         }.padding(.horizontal, 24).padding(.vertical, 15)
+    }
+}
+
+private struct MeterBar: View {
+    @ObservedObject var meter: MeterModel
+    var body: some View {
+        GeometryReader { geometry in
+            Capsule().fill(accent.opacity(0.13))
+                .overlay(alignment: .leading) { Capsule().fill(accent).frame(width: max(2, geometry.size.width * meter.level)) }
+        }
     }
 }
 
@@ -356,6 +365,8 @@ struct WindowAccessor: NSViewRepresentable {
         weak var model: AppModel?
         weak var original: NSWindowDelegate?
         var lastCompact = false
+        var lastLevel: NSWindow.Level?
+        weak var attached: NSWindow?
         var normalFrame: NSRect?
         var compactFrame: NSRect?
         override func responds(to selector: Selector!) -> Bool { super.responds(to: selector) || (original?.responds(to: selector) ?? false) }
@@ -368,28 +379,35 @@ struct WindowAccessor: NSViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator() }
     func makeNSView(context: Context) -> NSView { NSView() }
     func updateNSView(_ view: NSView, context: Context) {
+        // SwiftUI calls this on every caption refresh. Touch the window only
+        // when its floating or compact state actually changes.
+        let coordinator = context.coordinator
+        let level: NSWindow.Level = floating || compact ? .floating : .normal
+        if let window = view.window, coordinator.attached === window,
+           coordinator.lastLevel == level, coordinator.lastCompact == compact { return }
         DispatchQueue.main.async {
             guard let window = view.window else { return }
             window.isMovable = true
             window.isMovableByWindowBackground = compact
-            window.level = floating || compact ? .floating : .normal
-            if context.coordinator.lastCompact != compact {
+            if coordinator.lastLevel != level { window.level = level; coordinator.lastLevel = level }
+            if coordinator.lastCompact != compact {
                 if compact {
-                    context.coordinator.normalFrame = window.frame
-                    let frame = context.coordinator.compactFrame ?? NSRect(x: window.frame.minX, y: window.frame.maxY - 268, width: 560, height: 268)
+                    coordinator.normalFrame = window.frame
+                    let frame = coordinator.compactFrame ?? NSRect(x: window.frame.minX, y: window.frame.maxY - 268, width: 560, height: 268)
                     window.contentMinSize = NSSize(width: 360, height: 160)
                     window.setFrame(frame, display: true)
                 } else {
-                    context.coordinator.compactFrame = window.frame
+                    coordinator.compactFrame = window.frame
                     window.contentMinSize = NSSize(width: 700, height: 500)
-                    if let frame = context.coordinator.normalFrame { window.setFrame(frame, display: true) }
+                    if let frame = coordinator.normalFrame { window.setFrame(frame, display: true) }
                 }
-                context.coordinator.lastCompact = compact
+                coordinator.lastCompact = compact
             }
             model.window = window
-            context.coordinator.model = model
-            if window.delegate !== context.coordinator {
-                context.coordinator.original = window.delegate; window.delegate = context.coordinator
+            coordinator.model = model
+            coordinator.attached = window
+            if window.delegate !== coordinator {
+                coordinator.original = window.delegate; window.delegate = coordinator
             }
         }
     }

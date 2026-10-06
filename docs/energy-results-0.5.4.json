@@ -1,0 +1,602 @@
+{
+  "hardware": "Apple M4, 4 performance + 6 efficiency cores, 24GB; macOS 26.6.2; AC power",
+  "longStream": {
+    "method": "Unpaced, single process, 100 ms feeds of all-terms-holdout.wav (619.6 s) repeated to 60 minutes; native hotwords, 2 paths, score 0.5. decode/step = mean native feed+decode per 100 ms feed; result/call = mean result retrieval and parsing. Same input, same machine, run serially.",
+    "baseline053": [
+      {
+        "minute": 5,
+        "words": 891,
+        "decodeMsPerStep": 17.99,
+        "resultMsPerCall": 0.51
+      },
+      {
+        "minute": 10,
+        "words": 1757,
+        "decodeMsPerStep": 18.84,
+        "resultMsPerCall": 1.42
+      },
+      {
+        "minute": 15,
+        "words": 2655,
+        "decodeMsPerStep": 19.91,
+        "resultMsPerCall": 2.31
+      },
+      {
+        "minute": 20,
+        "words": 3516,
+        "decodeMsPerStep": 20.96,
+        "resultMsPerCall": 3.18
+      },
+      {
+        "minute": 25,
+        "words": 4414,
+        "decodeMsPerStep": 21.84,
+        "resultMsPerCall": 4.06
+      },
+      {
+        "minute": 30,
+        "words": 5279,
+        "decodeMsPerStep": 22.4,
+        "resultMsPerCall": 4.98
+      },
+      {
+        "minute": 35,
+        "words": 6173,
+        "decodeMsPerStep": 23.3,
+        "resultMsPerCall": 5.9
+      },
+      {
+        "minute": 40,
+        "words": 7042,
+        "decodeMsPerStep": 24.16,
+        "resultMsPerCall": 6.79
+      },
+      {
+        "minute": 45,
+        "words": 7937,
+        "decodeMsPerStep": 25.06,
+        "resultMsPerCall": 7.63
+      },
+      {
+        "minute": 50,
+        "words": 8801,
+        "decodeMsPerStep": 25.68,
+        "resultMsPerCall": 8.57
+      },
+      {
+        "minute": 55,
+        "words": 9698,
+        "decodeMsPerStep": 26.32,
+        "resultMsPerCall": 9.57
+      },
+      {
+        "minute": 60,
+        "words": 10561,
+        "decodeMsPerStep": 27.27,
+        "resultMsPerCall": 10.54
+      }
+    ],
+    "candidate054": [
+      {
+        "minute": 5,
+        "words": 891,
+        "decodeMsPerStep": 17.57,
+        "resultMsPerCall": 0.05
+      },
+      {
+        "minute": 10,
+        "words": 1757,
+        "decodeMsPerStep": 17.49,
+        "resultMsPerCall": 0.05
+      },
+      {
+        "minute": 15,
+        "words": 2655,
+        "decodeMsPerStep": 17.58,
+        "resultMsPerCall": 0.05
+      },
+      {
+        "minute": 20,
+        "words": 3516,
+        "decodeMsPerStep": 17.55,
+        "resultMsPerCall": 0.05
+      },
+      {
+        "minute": 25,
+        "words": 4414,
+        "decodeMsPerStep": 17.64,
+        "resultMsPerCall": 0.05
+      },
+      {
+        "minute": 30,
+        "words": 5279,
+        "decodeMsPerStep": 17.56,
+        "resultMsPerCall": 0.05
+      },
+      {
+        "minute": 35,
+        "words": 6173,
+        "decodeMsPerStep": 17.52,
+        "resultMsPerCall": 0.05
+      },
+      {
+        "minute": 40,
+        "words": 7042,
+        "decodeMsPerStep": 17.53,
+        "resultMsPerCall": 0.05
+      },
+      {
+        "minute": 45,
+        "words": 7937,
+        "decodeMsPerStep": 17.54,
+        "resultMsPerCall": 0.05
+      },
+      {
+        "minute": 50,
+        "words": 8801,
+        "decodeMsPerStep": 16.87,
+        "resultMsPerCall": 0.05
+      },
+      {
+        "minute": 55,
+        "words": 9698,
+        "decodeMsPerStep": 17.34,
+        "resultMsPerCall": 0.05
+      },
+      {
+        "minute": 60,
+        "words": 10561,
+        "decodeMsPerStep": 16.98,
+        "resultMsPerCall": 0.05
+      }
+    ],
+    "finalTranscriptIdentical": true,
+    "finalTranscriptSha256": "e05ef1c63e03591ecba2376aa2f850ffbc5b80a6a0fa1ffcc33fd5113def2067"
+  },
+  "memoryKernels": {
+    "method": "Unpaced full pass of each fixture, production model and hotwords; only difference is SessionConfig.mlas.disable_kleidiai=1. Footprint is phys_footprint after the pass. CPU energy from TASK_POWER_INFO_V2 task_energy.",
+    "runs": [
+      {
+        "input": "ordinary-human.wav",
+        "config": "kleidiai",
+        "cpuEnergyJoules": 313.81,
+        "footprintMB": 1423,
+        "words": 822,
+        "transcriptSha256Prefix": "04a5161033d705ca"
+      },
+      {
+        "input": "ordinary-human.wav",
+        "config": "standardMlas",
+        "cpuEnergyJoules": 312.23,
+        "footprintMB": 803,
+        "words": 822,
+        "transcriptSha256Prefix": "04a5161033d705ca"
+      },
+      {
+        "input": "general.wav",
+        "config": "kleidiai",
+        "cpuEnergyJoules": 32.77,
+        "footprintMB": 1384,
+        "words": 121,
+        "transcriptSha256Prefix": "405e8ab77f294de6"
+      },
+      {
+        "input": "general.wav",
+        "config": "standardMlas",
+        "cpuEnergyJoules": 33.8,
+        "footprintMB": 789,
+        "words": 121,
+        "transcriptSha256Prefix": "405e8ab77f294de6"
+      },
+      {
+        "input": "holdout.wav",
+        "config": "kleidiai",
+        "cpuEnergyJoules": 51.78,
+        "footprintMB": 1387,
+        "words": 147,
+        "transcriptSha256Prefix": "c39b2fdd89e18db2"
+      },
+      {
+        "input": "holdout.wav",
+        "config": "standardMlas",
+        "cpuEnergyJoules": 49.61,
+        "footprintMB": 792,
+        "words": 147,
+        "transcriptSha256Prefix": "c39b2fdd89e18db2"
+      },
+      {
+        "input": "tuning.wav",
+        "config": "kleidiai",
+        "cpuEnergyJoules": 52.35,
+        "footprintMB": 1388,
+        "words": 141,
+        "transcriptSha256Prefix": "77638f10ab06c255"
+      },
+      {
+        "input": "tuning.wav",
+        "config": "standardMlas",
+        "cpuEnergyJoules": 56.72,
+        "footprintMB": 766,
+        "words": 141,
+        "transcriptSha256Prefix": "77638f10ab06c255"
+      },
+      {
+        "input": "tuning-noise.wav",
+        "config": "kleidiai",
+        "cpuEnergyJoules": 57.07,
+        "footprintMB": 1418,
+        "words": 140,
+        "transcriptSha256Prefix": "97523621782ac817"
+      },
+      {
+        "input": "tuning-noise.wav",
+        "config": "standardMlas",
+        "cpuEnergyJoules": 56.83,
+        "footprintMB": 793,
+        "words": 140,
+        "transcriptSha256Prefix": "97523621782ac817"
+      },
+      {
+        "input": "tuning-pauses.wav",
+        "config": "kleidiai",
+        "cpuEnergyJoules": 88.49,
+        "footprintMB": 1391,
+        "words": 139,
+        "transcriptSha256Prefix": "5625fd39a10c6f18"
+      },
+      {
+        "input": "tuning-pauses.wav",
+        "config": "standardMlas",
+        "cpuEnergyJoules": 88.36,
+        "footprintMB": 772,
+        "words": 139,
+        "transcriptSha256Prefix": "5625fd39a10c6f18"
+      },
+      {
+        "input": "independent.wav",
+        "config": "kleidiai",
+        "cpuEnergyJoules": 64.01,
+        "footprintMB": 1388,
+        "words": 166,
+        "transcriptSha256Prefix": "7ff21da6253f65e4"
+      },
+      {
+        "input": "independent.wav",
+        "config": "standardMlas",
+        "cpuEnergyJoules": 64.24,
+        "footprintMB": 793,
+        "words": 166,
+        "transcriptSha256Prefix": "7ff21da6253f65e4"
+      },
+      {
+        "input": "challenge.wav",
+        "config": "kleidiai",
+        "cpuEnergyJoules": 84.23,
+        "footprintMB": 1392,
+        "words": 252,
+        "transcriptSha256Prefix": "82e556190326d722"
+      },
+      {
+        "input": "challenge.wav",
+        "config": "standardMlas",
+        "cpuEnergyJoules": 85.24,
+        "footprintMB": 796,
+        "words": 252,
+        "transcriptSha256Prefix": "82e556190326d722"
+      },
+      {
+        "input": "silence.wav",
+        "config": "kleidiai",
+        "cpuEnergyJoules": 28.3,
+        "footprintMB": 1383,
+        "words": 0,
+        "transcriptSha256Prefix": "e3b0c44298fc1c14"
+      },
+      {
+        "input": "silence.wav",
+        "config": "standardMlas",
+        "cpuEnergyJoules": 28.14,
+        "footprintMB": 787,
+        "words": 0,
+        "transcriptSha256Prefix": "e3b0c44298fc1c14"
+      },
+      {
+        "input": "all-terms-holdout.wav",
+        "config": "kleidiai",
+        "cpuEnergyJoules": 575.48,
+        "footprintMB": 1526,
+        "words": 1819,
+        "transcriptSha256Prefix": "151913d69c4d6881"
+      },
+      {
+        "input": "all-terms-holdout.wav",
+        "config": "standardMlas",
+        "cpuEnergyJoules": 573.02,
+        "footprintMB": 864,
+        "words": 1819,
+        "transcriptSha256Prefix": "151913d69c4d6881"
+      }
+    ]
+  },
+  "pacedComparison": {
+    "method": "Real-time paced --benchmark, installed 0.5.3 app vs 0.5.4 candidate, alternating order. Short inputs; they confirm no regression and do not exercise long-lecture growth.",
+    "runs": [
+      {
+        "run": "new-tuning-1",
+        "cpuEnergyJoules": 8.215,
+        "cpuSeconds": 51.26,
+        "maximumSeconds": 1.035,
+        "p95Seconds": 0.981,
+        "overThree": 0,
+        "maximumQueueSeconds": 0.355,
+        "maximumProcessingSeconds": 0.353,
+        "errors": [],
+        "transcriptSha256Prefix": "77638f10ab06c255"
+      },
+      {
+        "run": "old-tuning-1",
+        "cpuEnergyJoules": 6.752,
+        "cpuSeconds": 61.23,
+        "maximumSeconds": 1.036,
+        "p95Seconds": 1.009,
+        "overThree": 0,
+        "maximumQueueSeconds": 0.374,
+        "maximumProcessingSeconds": 0.368,
+        "errors": [],
+        "transcriptSha256Prefix": "77638f10ab06c255"
+      },
+      {
+        "run": "new-tuning-2",
+        "cpuEnergyJoules": 6.638,
+        "cpuSeconds": 59.5,
+        "maximumSeconds": 1.054,
+        "p95Seconds": 0.998,
+        "overThree": 0,
+        "maximumQueueSeconds": 0.377,
+        "maximumProcessingSeconds": 0.371,
+        "errors": [],
+        "transcriptSha256Prefix": "77638f10ab06c255"
+      },
+      {
+        "run": "old-tuning-2",
+        "cpuEnergyJoules": 6.966,
+        "cpuSeconds": 60.39,
+        "maximumSeconds": 1.105,
+        "p95Seconds": 1.01,
+        "overThree": 0,
+        "maximumQueueSeconds": 0.466,
+        "maximumProcessingSeconds": 0.463,
+        "errors": [],
+        "transcriptSha256Prefix": "77638f10ab06c255"
+      },
+      {
+        "run": "old-human",
+        "cpuEnergyJoules": 38.502,
+        "cpuSeconds": 356.43,
+        "maximumSeconds": 1.38,
+        "p95Seconds": 1.011,
+        "overThree": 0,
+        "maximumQueueSeconds": 0.41,
+        "maximumProcessingSeconds": 0.409,
+        "errors": [],
+        "transcriptSha256Prefix": "04a5161033d705ca"
+      },
+      {
+        "run": "new-human",
+        "cpuEnergyJoules": 38.476,
+        "cpuSeconds": 339.58,
+        "maximumSeconds": 1.388,
+        "p95Seconds": 0.995,
+        "overThree": 0,
+        "maximumQueueSeconds": 0.381,
+        "maximumProcessingSeconds": 0.379,
+        "errors": [],
+        "transcriptSha256Prefix": "04a5161033d705ca"
+      }
+    ]
+  },
+  "limits": "CPU energy only; not battery discharge or whole-system power. No new microphone or classroom test. The long-stream comparison is unpaced and measures per-step processing cost, not wall-clock battery life.",
+  "pacedTwentyMinutes": {
+    "status": "completed",
+    "targetSeconds": 1200,
+    "elapsedSeconds": 1205.8779037917266,
+    "recognizedWords": 3518,
+    "maximumSeconds": 1.2589248541789857,
+    "firstDisplayMaximumSeconds": 1.2589248541789857,
+    "correctionMaximumSeconds": 1.1157558060530164,
+    "corrections": 315,
+    "overThreeSeconds": 0,
+    "p95Recent10000Seconds": 0.9905469616223286,
+    "maximumQueueWaitSeconds": 0.6657576666912064,
+    "maximumProcessingSeconds": 0.6312138333451003,
+    "peakPhysicalFootprintMB": 968.7987518310547,
+    "archiveMatchesFinalWords": true,
+    "exportMatchesArchive": true,
+    "enhancementActive": true,
+    "errors": [],
+    "screenLines": 294,
+    "measurement": "Same production converter, native continuous decoder, VAD, main-queue callbacks, caption history, latency tracker and transcript writer. Owned synthesized audio repeated at real-time pace without resets. Estimated token timings; no microphone or real classroom. Recent percentile uses last 10000 samples; max and timeout counts cover whole session.",
+    "checkpoints": [
+      {
+        "elapsedSeconds": 60.02303562499583,
+        "recognizedWords": 160,
+        "physicalFootprintMB": 739.3612747192383,
+        "maximumSeconds": 1.0151177196111547,
+        "processingMaximum": 0.37246991670690477,
+        "queueMaximum": 0.3785795416915789,
+        "overThree": 0
+      },
+      {
+        "elapsedSeconds": 120.49065366666764,
+        "recognizedWords": 344,
+        "physicalFootprintMB": 739.8456497192383,
+        "maximumSeconds": 1.0306246779672819,
+        "processingMaximum": 0.37246991670690477,
+        "queueMaximum": 0.3785795416915789,
+        "overThree": 0
+      },
+      {
+        "elapsedSeconds": 180.4566268749768,
+        "recognizedWords": 528,
+        "physicalFootprintMB": 740.5175247192383,
+        "maximumSeconds": 1.0306246779672819,
+        "processingMaximum": 0.37246991670690477,
+        "queueMaximum": 0.3785795416915789,
+        "overThree": 0
+      },
+      {
+        "elapsedSeconds": 240.32384862506296,
+        "recognizedWords": 699,
+        "physicalFootprintMB": 740.9862747192383,
+        "maximumSeconds": 1.0306246779672819,
+        "processingMaximum": 0.37246991670690477,
+        "queueMaximum": 0.3785795416915789,
+        "overThree": 0
+      },
+      {
+        "elapsedSeconds": 300.2587566666771,
+        "recognizedWords": 876,
+        "physicalFootprintMB": 741.0175247192383,
+        "maximumSeconds": 1.0306246779672819,
+        "processingMaximum": 0.37246991670690477,
+        "queueMaximum": 0.3785795416915789,
+        "overThree": 0
+      },
+      {
+        "elapsedSeconds": 360.1612682916457,
+        "recognizedWords": 1046,
+        "physicalFootprintMB": 741.0800247192383,
+        "maximumSeconds": 1.0675309062516476,
+        "processingMaximum": 0.4252776667708531,
+        "queueMaximum": 0.42751450010109693,
+        "overThree": 0
+      },
+      {
+        "elapsedSeconds": 420.11793900001794,
+        "recognizedWords": 1213,
+        "physicalFootprintMB": 741.2518997192383,
+        "maximumSeconds": 1.0675309062516476,
+        "processingMaximum": 0.4252776667708531,
+        "queueMaximum": 0.42751450010109693,
+        "overThree": 0
+      },
+      {
+        "elapsedSeconds": 480.0283564584097,
+        "recognizedWords": 1384,
+        "physicalFootprintMB": 741.4237747192383,
+        "maximumSeconds": 1.0675309062516476,
+        "processingMaximum": 0.4252776667708531,
+        "queueMaximum": 0.42751450010109693,
+        "overThree": 0
+      },
+      {
+        "elapsedSeconds": 540.5602172916988,
+        "recognizedWords": 1566,
+        "physicalFootprintMB": 741.4550247192383,
+        "maximumSeconds": 1.0675309062516476,
+        "processingMaximum": 0.4630847916705534,
+        "queueMaximum": 0.4633889999240637,
+        "overThree": 0
+      },
+      {
+        "elapsedSeconds": 600.4520252500661,
+        "recognizedWords": 1740,
+        "physicalFootprintMB": 741.6268997192383,
+        "maximumSeconds": 1.1157558060530164,
+        "processingMaximum": 0.4630847916705534,
+        "queueMaximum": 0.4633889999240637,
+        "overThree": 0
+      },
+      {
+        "elapsedSeconds": 660.3950900833588,
+        "recognizedWords": 1923,
+        "physicalFootprintMB": 741.6425247192383,
+        "maximumSeconds": 1.1157558060530164,
+        "processingMaximum": 0.4630847916705534,
+        "queueMaximum": 0.4673754998948425,
+        "overThree": 0
+      },
+      {
+        "elapsedSeconds": 720.2805870417506,
+        "recognizedWords": 2101,
+        "physicalFootprintMB": 741.6893997192383,
+        "maximumSeconds": 1.1157558060530164,
+        "processingMaximum": 0.4630847916705534,
+        "queueMaximum": 0.4673754998948425,
+        "overThree": 0
+      },
+      {
+        "elapsedSeconds": 780.1933018333511,
+        "recognizedWords": 2288,
+        "physicalFootprintMB": 741.7362747192383,
+        "maximumSeconds": 1.1157558060530164,
+        "processingMaximum": 0.4630847916705534,
+        "queueMaximum": 0.4673754998948425,
+        "overThree": 0
+      },
+      {
+        "elapsedSeconds": 840.0788912083954,
+        "recognizedWords": 2461,
+        "physicalFootprintMB": 741.9706497192383,
+        "maximumSeconds": 1.1157558060530164,
+        "processingMaximum": 0.4630847916705534,
+        "queueMaximum": 0.4673754998948425,
+        "overThree": 0
+      },
+      {
+        "elapsedSeconds": 900.58262595837,
+        "recognizedWords": 2640,
+        "physicalFootprintMB": 741.9550247192383,
+        "maximumSeconds": 1.1157558060530164,
+        "processingMaximum": 0.4630847916705534,
+        "queueMaximum": 0.4673754998948425,
+        "overThree": 0
+      },
+      {
+        "elapsedSeconds": 960.4682160833618,
+        "recognizedWords": 2807,
+        "physicalFootprintMB": 742.2518997192383,
+        "maximumSeconds": 1.1157558060530164,
+        "processingMaximum": 0.4630847916705534,
+        "queueMaximum": 0.4673754998948425,
+        "overThree": 0
+      },
+      {
+        "elapsedSeconds": 1020.3685644166544,
+        "recognizedWords": 2976,
+        "physicalFootprintMB": 742.2675247192383,
+        "maximumSeconds": 1.1157558060530164,
+        "processingMaximum": 0.4630847916705534,
+        "queueMaximum": 0.4673754998948425,
+        "overThree": 0
+      },
+      {
+        "elapsedSeconds": 1080.3768422916764,
+        "recognizedWords": 3146,
+        "physicalFootprintMB": 742.5175247192383,
+        "maximumSeconds": 1.1157558060530164,
+        "processingMaximum": 0.4630847916705534,
+        "queueMaximum": 0.4673754998948425,
+        "overThree": 0
+      },
+      {
+        "elapsedSeconds": 1140.1504523750627,
+        "recognizedWords": 3324,
+        "physicalFootprintMB": 742.7675247192383,
+        "maximumSeconds": 1.2589248541789857,
+        "processingMaximum": 0.6312138333451003,
+        "queueMaximum": 0.6657576666912064,
+        "overThree": 0
+      },
+      {
+        "elapsedSeconds": 1200.1811214999761,
+        "recognizedWords": 3502,
+        "physicalFootprintMB": 742.7362747192383,
+        "maximumSeconds": 1.2589248541789857,
+        "processingMaximum": 0.6312138333451003,
+        "queueMaximum": 0.6657576666912064,
+        "overThree": 0
+      }
+    ]
+  }
+}

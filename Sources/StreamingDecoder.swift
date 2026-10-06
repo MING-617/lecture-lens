@@ -45,13 +45,18 @@ final class StreamingDecoder {
     }
     static func cpuProvider(model: String) -> String {
         let path = model + "/cpu-runtime.conf"
-        let expected = "SessionConfig.session.intra_op.allow_spinning=0\nSessionConfig.session.inter_op.allow_spinning=0\n"
         // The native provider parser terminates on a malformed config file.
-        // Optional power settings must be validated before entering it.
-        guard let contents = try? String(contentsOfFile: path, encoding: .utf8),
-              contents == expected || contents == expected + "LectureLensWorkerQoS=background\n" ||
-              contents == expected + "LectureLensWorkerQoS=utility\n" else { return "cpu" }
-        return "cpu:" + path
+        // Optional power and memory settings must be validated before entering it:
+        // both no-spinning lines, then an optional helper QoS line, then the
+        // optional switch from KleidiAI to standard MLAS kernels.
+        let required = ["SessionConfig.session.intra_op.allow_spinning=0", "SessionConfig.session.inter_op.allow_spinning=0"]
+        let optional = [["LectureLensWorkerQoS=background", "LectureLensWorkerQoS=utility"], ["SessionConfig.mlas.disable_kleidiai=1"]]
+        guard let contents = try? String(contentsOfFile: path, encoding: .utf8), contents.hasSuffix("\n") else { return "cpu" }
+        var lines = contents.dropLast().split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        guard lines.starts(with: required) else { return "cpu" }
+        lines.removeFirst(required.count)
+        for choices in optional where lines.first.map(choices.contains) == true { lines.removeFirst() }
+        return lines.isEmpty ? "cpu:" + path : "cpu"
     }
     private static func validVocabulary(_ path: String, tokens: String) -> Bool {
         guard let text = try? String(contentsOfFile: path, encoding: .utf8),
@@ -75,21 +80,31 @@ final class StreamingDecoder {
         while SherpaOnnxIsOnlineStreamReady(recognizer, stream) != 0 { SherpaOnnxDecodeOnlineStream(recognizer, stream); decoded = true }
         return decoded
     }
+    // Tokens before this index can no longer change. Only the tail after it
+    // is converted natively and re-parsed, so a result costs the same at the
+    // end of a long lecture as at its start.
+    private var resultStart = 0
     func result() -> (String, [WordStamp], Int) {
-        guard let raw = SherpaOnnxGetOnlineStreamResult(recognizer, stream) else { return ("", [], 0) }
+        SherpaOnnxOnlineStreamSetResultStart(stream, Int32(resultStart))
+        guard let raw = SherpaOnnxGetOnlineStreamResult(recognizer, stream) else { return (parser.text, parser.words, parser.words.count) }
         defer { SherpaOnnxDestroyOnlineRecognizerResult(raw) }
         let r = raw.pointee
-        let text = String(cString: r.text)
         var pieces: [TokenPiece] = []
-        if let tokens = r.tokens_arr, let times = r.timestamps {
+        if r.count > 0 {
+            // Token text and timings are parallel only when every token has a
+            // timestamp. Keep the previous words rather than drop the tail.
+            guard let tokens = r.tokens_arr, let times = r.timestamps else {
+                return (parser.text, parser.words, parser.words.count)
+            }
             pieces.reserveCapacity(Int(r.count))
             for i in 0..<Int(r.count) {
                 guard let token = tokens[i] else { continue }
                 pieces.append(TokenPiece(text: String(cString: token), time: Double(times[i])))
             }
         }
-        let (words, changed) = parser.accept(pieces)
-        return (text, words, changed)
+        let (words, changed) = parser.accept(pieces, from: resultStart)
+        resultStart = min(Int(SherpaOnnxOnlineStreamStableTokens(stream)), parser.tokenCount)
+        return (parser.text, words, changed)
     }
     func finish() {
         feed(Array(repeating: 0, count: 16000))

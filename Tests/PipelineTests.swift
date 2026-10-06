@@ -25,7 +25,7 @@ import AVFoundation
         session.onResult = { event in archive.accept(event); _ = tracker.accept(event); if event.isFinal { final = event } }
         session.onVoice = { if $0 { voiceFrames += 1 } }
         session.onError = { errors.append($0.localizedDescription) }
-        try await session.streamFile(url: input, localeID: "en", contextualTerms: [])
+        try await session.streamFile(url: input, contextualTerms: [])
         await session.finish()
         assert(final != nil && final!.words.count == 68, "finish must drain all result callbacks, including the final word")
         try await archive.finish(reason: "pipeline test")

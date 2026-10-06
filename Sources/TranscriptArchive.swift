@@ -15,7 +15,7 @@ final class TranscriptArchive: @unchecked Sendable {
 
     init(directory: URL, date: Date = Date()) throws {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let format = DateFormatter(); format.dateFormat = "yyyy-MM-dd HH-mm-ss"
+        let format = DateFormatter(); format.locale = Locale(identifier: "en_US_POSIX"); format.dateFormat = "yyyy-MM-dd HH-mm-ss"
         url = directory.appendingPathComponent("\(format.string(from: date))-\(UUID().uuidString.prefix(6)).txt")
         guard FileManager.default.createFile(atPath: url.path, contents: nil) else { throw CocoaError(.fileWriteUnknown) }
         handle = try FileHandle(forWritingTo: url)

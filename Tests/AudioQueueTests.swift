@@ -23,7 +23,7 @@ final class AudioCount: @unchecked Sendable {
         memset(buffer.floatChannelData![0], 0, 1600 * MemoryLayout<Float>.size)
         for terms in [[], ["foreign key", "NumPy", "Scrum"]] as [[String]] {
         let failures = FailureCount()
-        let feeder = try AudioFeeder(input: format, model: URL(fileURLWithPath: CommandLine.arguments[1]), onLevel: { _,_,_ in }, onResult: { _ in }, onError: { _ in failures.add() }, onPerformance: { _,_ in }, contextualTerms: terms, score: 0.5)
+        let feeder = try AudioFeeder(input: format, model: URL(fileURLWithPath: CommandLine.arguments[1]), onAudio: { _ in }, onResult: { _ in }, onError: { _ in failures.add() }, contextualTerms: terms, score: 0.5)
         assert(feeder.enhanced == !terms.isEmpty)
         let started = ProcessInfo.processInfo.systemUptime
         // Attempt to enqueue 20 seconds of input without real-time pacing.
@@ -36,14 +36,14 @@ final class AudioCount: @unchecked Sendable {
         print("PASS: both ordinary and enhanced workers reject a 20-second burst, report once, and drain within three seconds")
         let failures = FailureCount(), audio = AudioCount()
         let recovering = try AudioFeeder(input: format, model: URL(fileURLWithPath: CommandLine.arguments[1]),
-                                        onLevel: { _, end, _ in audio.accept(end) }, onResult: { _ in },
-                                        onError: { _ in failures.add() }, onPerformance: { _,_ in },
+                                        onAudio: { audio.accept($0.end) }, onResult: { _ in },
+                                        onError: { _ in failures.add() },
                                         contextualTerms: ["foreign key", "NumPy"], score: 0.5)
-        let entered = DispatchSemaphore(value: 0)
         // Force a brief real interruption; continue delivering input at its
         // normal rate. The old one-second cap discarded the tail here.
-        recovering.queue.async { entered.signal(); Thread.sleep(forTimeInterval: 1.1) }
-        entered.wait()
+        await withCheckedContinuation { entered in
+            recovering.queue.async { entered.resume(); Thread.sleep(forTimeInterval: 1.1) }
+        }
         let origin = ProcessInfo.processInfo.systemUptime
         for i in 0..<12 {
             let deadline = origin + Double(i + 1) * 0.1

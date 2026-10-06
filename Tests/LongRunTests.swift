@@ -72,7 +72,7 @@ func footprintMB() -> (current: Double, peak: Double) {
             }
         }
         inputTask = Task {
-            try await session.streamFile(url: input, localeID: "en", contextualTerms: pack.terms.map(\.english), repetitions: 10000, maximumDuration: seconds)
+            try await session.streamFile(url: input, contextualTerms: pack.terms.map(\.english), repetitions: 10000, maximumDuration: seconds)
         }
         // Optional test-only injection exercises the same interruption path
         // without asking the user to put their computer to sleep.

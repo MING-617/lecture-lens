@@ -1,10 +1,14 @@
 --- a/sherpa-onnx/csrc/online-transducer-modified-beam-search-nemo-decoder.cc
 +++ b/sherpa-onnx/csrc/online-transducer-modified-beam-search-nemo-decoder.cc
-@@ -285,7 +285,26 @@
+@@ -285,12 +285,64 @@
    // noise-only audio.
    Hypothesis best = hyps.GetMostProbable(false /*length_norm*/);
  
 -  r.hyps = std::move(hyps);
+-  r.tokens = std::move(best.ys);
+-  r.timestamps = std::move(best.timestamps);
+-  r.ys_probs = std::move(best.ys_probs);
+-  r.context_scores = std::move(best.context_scores);
 +  // Lecture Lens: commit the best acoustic prefix after a bounded 1.6s
 +  // revision window. Keep encoder and recurrent decoder state continuous;
 +  // prune only alternative paths that would rewrite already spoken history.
@@ -16,37 +20,79 @@
 +  while (stable < best.timestamps.size() && best.timestamps[stable] <= cutoff) {
 +    ++stable;
 +  }
-+  Hypotheses bounded;
++
++  // Hypotheses hold only tokens after r.stable_tokens. The full result is the
++  // committed prefix plus the best tail, so copying, keying and comparing
++  // paths no longer grows with the length of the lecture.
++  const size_t committed = static_cast<size_t>(r.stable_tokens);
++  auto keep_prefix = [committed](auto *full, const auto &tail) {
++    full->resize(std::min(full->size(), committed));
++    full->insert(full->end(), tail.begin(), tail.end());
++  };
++  keep_prefix(&r.tokens, best.ys);
++  keep_prefix(&r.timestamps, best.timestamps);
++  keep_prefix(&r.ys_probs, best.ys_probs);
++  if (context_graph != nullptr) {
++    keep_prefix(&r.context_scores, best.context_scores);
++  }
+   r.num_trailing_blanks = best.num_trailing_blanks;
++
++  std::vector<Hypothesis> retained;
 +  for (auto &p : hyps) {
 +    auto &h = p.second;
 +    if (h.ys.size() >= stable &&
 +        std::equal(best.ys.begin(), best.ys.begin() + stable, h.ys.begin())) {
-+      bounded.Add(std::move(h));
++      retained.push_back(std::move(h));
 +    }
 +  }
++  // A path whose newest token has not yet run through the prediction network
++  // still needs that token as its next decoder input; keep it in the path.
++  size_t trim = stable;
++  for (const auto &h : retained) {
++    if (!h.nemo_decoder_out.value && !h.ys.empty()) {
++      trim = std::min(trim, h.ys.size() - 1);
++    }
++  }
++  Hypotheses bounded;
++  for (auto &h : retained) {
++    auto drop = [trim](auto *values) {
++      values->erase(values->begin(),
++                    values->begin() + std::min(trim, values->size()));
++    };
++    drop(&h.ys);
++    drop(&h.timestamps);
++    drop(&h.ys_probs);
++    drop(&h.context_scores);
++    bounded.Add(std::move(h));
++  }
 +  r.hyps = std::move(bounded);
-   r.tokens = std::move(best.ys);
-   r.timestamps = std::move(best.timestamps);
-   r.ys_probs = std::move(best.ys_probs);
++  r.stable_tokens += static_cast<int32_t>(trim);
+   r.frame_offset += num_rows;
+ }
+ 
 --- a/sherpa-onnx/csrc/session.cc
 +++ b/sherpa-onnx/csrc/session.cc
-@@ -11,6 +11,12 @@
+@@ -11,7 +11,13 @@
  #include <unordered_map>
  #include <utility>
  #include <vector>
 +#include <new>
-+
+ 
 +#if defined(__APPLE__)
 +#include <pthread.h>
 +#include <pthread/qos.h>
 +#endif
- 
++
  #include "sherpa-onnx/csrc/file-utils.h"
  #include "sherpa-onnx/csrc/macros.h"
-@@ -136,6 +142,41 @@
-   }
- }
- 
+ #include "sherpa-onnx/csrc/provider.h"
+@@ -133,8 +139,43 @@
+                          kv.second.c_str());
+       }
+     }
++  }
++}
++
 +#if defined(__APPLE__)
 +namespace {
 +const qos_class_t kLectureLensBackground = QOS_CLASS_BACKGROUND;
@@ -69,11 +115,11 @@
 +      w->function(w->argument);
 +      return nullptr;
 +    }, worker);
-+  }
+   }
 +  pthread_attr_destroy(&attributes);
 +  if (status != 0) { delete worker; return nullptr; }
 +  return reinterpret_cast<OrtCustomThreadHandle>(worker);
-+}
+ }
 +void JoinLectureLensWorker(OrtCustomThreadHandle handle) {
 +  auto worker = const_cast<LectureLensWorker *>(reinterpret_cast<const LectureLensWorker *>(handle));
 +  pthread_join(worker->thread, nullptr);
@@ -81,10 +127,9 @@
 +}
 +}  // namespace
 +#endif
-+
+ 
  Ort::SessionOptions GetSessionOptionsImpl(
      int32_t num_threads, const std::string &provider_str,
-     const ProviderConfig *provider_config /*= nullptr*/) {
 @@ -150,6 +191,19 @@
    sess_opts.SetIntraOpNumThreads(num_threads);
  
@@ -105,3 +150,129 @@
  
    std::vector<std::string> available_providers = Ort::GetAvailableProviders();
    std::ostringstream os;
+--- a/sherpa-onnx/csrc/online-transducer-decoder.h
++++ b/sherpa-onnx/csrc/online-transducer-decoder.h
+@@ -36,6 +36,13 @@
+   // used only in modified beam_search
+   Hypotheses hyps;
+ 
++  // Lecture Lens: leading tokens of `tokens` that no retained hypothesis can
++  // revise. Beam hypotheses store only the tokens after this prefix.
++  int32_t stable_tokens = 0;
++
++  // Lecture Lens: GetResult() converts only tokens from this index onward.
++  int32_t result_start = 0;
++
+   OnlineTransducerDecoderResult()
+       : tokens{}, num_trailing_blanks(0), decoder_out{nullptr}, hyps{} {}
+ 
+--- a/sherpa-onnx/csrc/online-transducer-decoder.cc
++++ b/sherpa-onnx/csrc/online-transducer-decoder.cc
+@@ -40,6 +40,8 @@
+   ys_probs = other.ys_probs;
+   lm_probs = other.lm_probs;
+   context_scores = other.context_scores;
++  stable_tokens = other.stable_tokens;
++  result_start = other.result_start;
+ 
+   return *this;
+ }
+@@ -67,6 +69,8 @@
+   ys_probs = std::move(other.ys_probs);
+   lm_probs = std::move(other.lm_probs);
+   context_scores = std::move(other.context_scores);
++  stable_tokens = other.stable_tokens;
++  result_start = other.result_start;
+ 
+   return *this;
+ }
+--- a/sherpa-onnx/csrc/online-recognizer-transducer-nemo-impl.h
++++ b/sherpa-onnx/csrc/online-recognizer-transducer-nemo-impl.h
+@@ -194,7 +194,27 @@
+     // TODO(fangjun): Remember to change these constants if needed
+     int32_t frame_shift_ms = 10;
+     int32_t subsampling_factor = model_->SubsamplingFactor();
+-    const auto &decoder_result = s->GetResult();
++    const auto &full_result = s->GetResult();
++    // Lecture Lens: convert only the requested suffix. Its timestamps stay
++    // absolute; the caller retains the unchanged earlier tokens.
++    OnlineTransducerDecoderResult suffix;
++    const bool sliced = full_result.result_start > 0;
++    if (sliced) {
++      size_t first = std::min(static_cast<size_t>(full_result.result_start),
++                              full_result.tokens.size());
++      auto copy_from = [first](const auto &values, auto *target) {
++        if (values.size() >= first) {
++          target->assign(values.begin() + first, values.end());
++        }
++      };
++      suffix.frame_offset = full_result.frame_offset;
++      suffix.num_trailing_blanks = full_result.num_trailing_blanks;
++      copy_from(full_result.tokens, &suffix.tokens);
++      copy_from(full_result.timestamps, &suffix.timestamps);
++      copy_from(full_result.ys_probs, &suffix.ys_probs);
++      copy_from(full_result.context_scores, &suffix.context_scores);
++    }
++    const auto &decoder_result = sliced ? suffix : full_result;
+     bool has_language_tag =
+         !language_tag_token_ids_.empty() && ContainsLanguageTag(decoder_result);
+     auto r = has_language_tag
+--- a/sherpa-onnx/c-api/c-api.h
++++ b/sherpa-onnx/c-api/c-api.h
+@@ -648,6 +648,21 @@
+                                 const SherpaOnnxOnlineStream *stream);
+ 
+ /**
++ * @brief Lecture Lens: number of leading result tokens that decoding can no
++ * longer revise. Tokens before this index never change for this stream.
++ */
++SHERPA_ONNX_API int32_t
++SherpaOnnxOnlineStreamStableTokens(const SherpaOnnxOnlineStream *stream);
++
++/**
++ * @brief Lecture Lens: make later SherpaOnnxGetOnlineStreamResult() calls
++ * return only tokens from index @p first onward (text, tokens, timestamps).
++ * Timestamps remain relative to the start of the stream.
++ */
++SHERPA_ONNX_API void SherpaOnnxOnlineStreamSetResultStart(
++    const SherpaOnnxOnlineStream *stream, int32_t first);
++
++/**
+  * @brief Destroy a result returned by SherpaOnnxGetOnlineStreamResult().
+  *
+  * @param r A pointer returned by SherpaOnnxGetOnlineStreamResult().
+--- a/sherpa-onnx/c-api/c-api.cc
++++ b/sherpa-onnx/c-api/c-api.cc
+@@ -281,6 +281,21 @@
+   recognizer->impl->DecodeStreams(ss.data(), n);
+ }
+ 
++int32_t SherpaOnnxOnlineStreamStableTokens(
++    const SherpaOnnxOnlineStream *stream) {
++  if (!stream) return 0;
++  const auto &r = stream->impl->GetResult();
++  // Greedy search keeps no alternative paths, so every emitted token is final.
++  return r.hyps.Size() == 0 ? static_cast<int32_t>(r.tokens.size())
++                            : r.stable_tokens;
++}
++
++void SherpaOnnxOnlineStreamSetResultStart(const SherpaOnnxOnlineStream *stream,
++                                          int32_t first) {
++  if (!stream) return;
++  stream->impl->GetResult().result_start = first > 0 ? first : 0;
++}
++
+ const SherpaOnnxOnlineRecognizerResult *SherpaOnnxGetOnlineStreamResult(
+     const SherpaOnnxOnlineRecognizer *recognizer,
+     const SherpaOnnxOnlineStream *stream) {
+--- a/sherpa-onnx/c-api/sherpa-onnx-symbols-c.exp
++++ b/sherpa-onnx/c-api/sherpa-onnx-symbols-c.exp
+@@ -87,6 +87,8 @@
+ _SherpaOnnxGetOfflineStreamResultAsJson
+ _SherpaOnnxGetOnlineStreamResult
+ _SherpaOnnxGetOnlineStreamResultAsJson
++_SherpaOnnxOnlineStreamSetResultStart
++_SherpaOnnxOnlineStreamStableTokens
+ _SherpaOnnxGetOnnxruntimeVersionStr
+ _SherpaOnnxGetVersionStr
+ _SherpaOnnxIsKeywordStreamReady

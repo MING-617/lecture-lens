@@ -66,7 +66,33 @@ import Foundation
         _ = rollbackTracker.accept(event([], 0, 1.4))
         _ = rollbackTracker.accept(event(afterRollback, 0, 8, final: true))
         assert(rollbackTracker.overLimit == 2, "retracted words reappearing late must get new appearance times")
+        // Tail-only parsing must equal full re-parsing whenever the tokens
+        // before the offset are final, including punctuation that attaches to
+        // a final word and continuations that merge across the boundary.
+        var full = StreamingWords(), tail = StreamingWords(), seed: UInt64 = 617
+        func random(_ limit: Int) -> Int {
+            seed = seed &* 6364136223846793005 &+ 1442695040888963407
+            return Int((seed >> 33) % UInt64(limit))
+        }
+        let vocabulary = ["▁the", "▁super", "key", "▁table", ",", ".", "▁", "s", "▁data", "base", "▁2", "▁"]
+        var stream: [TokenPiece] = [], stable = 0, clock = 0.0
+        for step in 0..<3000 {
+            // Revise or retract only the unstable suffix, then append.
+            let unstable = stream.count - stable
+            if unstable > 0, random(3) == 0 { stream.removeLast(random(unstable + 1)) }
+            if unstable > 0, random(4) == 0, !stream.isEmpty, stream.count > stable {
+                let i = stable + random(stream.count - stable)
+                stream[i] = TokenPiece(text: vocabulary[random(vocabulary.count)], time: stream[i].time + 0.01)
+            }
+            for _ in 0..<random(4) { clock += 0.08; stream.append(TokenPiece(text: vocabulary[random(vocabulary.count)], time: clock)) }
+            let offset = min(tail.tokenCount, stable)
+            let expected = full.accept(stream), actual = tail.accept(Array(stream[offset...]), from: offset)
+            assert(expected.0 == actual.0 && expected.1 == actual.1, "tail parsing differs at step \(step)")
+            assert(tail.text == actual.0.map(\.text).joined(separator: " "), "incremental text differs at step \(step)")
+            if random(2) == 0 { stable = max(stable, stream.count - random(6)) }
+            stable = min(stable, stream.count)
+        }
         assert(RecognitionVocabulary.phrases([" SQL ", "sql", "bad:9", "bad/phrase", "foreign key", "C++"]) == ["C++", "foreign key", "SQL"])
-        print("PASS: native token replacement, deletion, insertion and empty rollback; late punctuation; corrected archive/export/history; uncapped revision delay; legacy events and hotword grammar")
+        print("PASS: native token replacement, deletion, insertion and empty rollback; 3,000 tail-only parses equal full re-parsing; late punctuation; corrected archive/export/history; uncapped revision delay; legacy events and hotword grammar")
     }
 }

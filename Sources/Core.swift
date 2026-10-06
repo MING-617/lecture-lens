@@ -1,31 +1,19 @@
 import Foundation
 
 struct Caption: Identifiable, Equatable {
-    var id: String { stableID ?? String(format: "%.3f", start) }
+    let id: String
     let start: Double
     let end: Double
     let text: String
     let isFinal: Bool
-    var stableID: String? = nil
 }
 
-/// Replace overlapping provisional results instead of appending every hypothesis.
+/// Short on-screen lines of 12 words, rebuilt only from the revised suffix.
+/// A bounded in-memory history keeps a long lecture from growing without limit.
 struct CaptionHistory {
     private(set) var captions: [Caption] = []
     private var streamStart: Double?
     private var firstStreamGroup = 0
-    mutating func accept(_ caption: Caption) {
-        streamStart = nil
-        guard !caption.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        captions.removeAll { old in
-            let overlaps = old.start < caption.end - 0.005 && caption.start < old.end - 0.005
-            return old.id == caption.id || (!old.isFinal && overlaps)
-        }
-        captions.append(caption)
-        captions.sort { $0.start < $1.start }
-        // A bounded in-memory history keeps a long lecture from growing without limit.
-        if captions.count > 300 { captions.removeFirst(captions.count - 300) }
-    }
     mutating func clear() { captions = []; streamStart = nil; firstStreamGroup = 0 }
     mutating func acceptStreaming(_ event: RecognitionEvent) {
         guard !event.words.isEmpty else { clear(); return }
@@ -44,9 +32,8 @@ struct CaptionHistory {
         for group in (first + keep)..<total {
             let begin = group * count, end = min(begin + count, event.words.count)
             let words = event.words[begin..<end]
-            captions.append(Caption(start: words.first!.start, end: words.last!.end,
-                                    text: words.map(\.text).joined(separator: " "), isFinal: event.isFinal || group < total - 1,
-                                    stableID: "stream-\(event.start)-\(group)"))
+            captions.append(Caption(id: "stream-\(event.start)-\(group)", start: words.first!.start, end: words.last!.end,
+                                    text: words.map(\.text).joined(separator: " "), isFinal: event.isFinal || group < total - 1))
         }
         streamStart = event.start; firstStreamGroup = first
     }
@@ -86,42 +73,6 @@ struct CoursePack: Codable {
 }
 
 enum Glossary {
-    static let defaults: [Term] = [
-        Term(english: "race condition", chinese: "竞态条件", explanation: "结果取决于并发操作的执行时序。", course: "Systems"),
-        Term(english: "deadlock", chinese: "死锁", explanation: "任务互相等待对方释放资源，无法继续。", course: "Systems"),
-        Term(english: "concurrency", chinese: "并发", explanation: "多个任务在重叠的时间段内推进。", course: "Systems"),
-        Term(english: "concurrent", chinese: "并发的", explanation: "描述在重叠时间段内推进的操作。", course: "Systems"),
-        Term(english: "mutual exclusion", chinese: "互斥", explanation: "同一时刻只允许一个任务访问共享资源。", course: "Systems"),
-        Term(english: "critical section", chinese: "临界区", explanation: "访问共享资源、需要协调的代码片段。", course: "Systems"),
-        Term(english: "semaphore", chinese: "信号量", explanation: "用于协调任务访问资源的同步机制。", course: "Systems"),
-        Term(english: "latency", chinese: "延迟", explanation: "从发起操作到获得响应的时间。", course: "Systems"),
-        Term(english: "throughput", chinese: "吞吐量", explanation: "单位时间内完成的工作量。", course: "Systems"),
-        Term(english: "packet", chinese: "数据包", explanation: "网络中传输的数据单元。", course: "Systems"),
-        Term(english: "encapsulation", chinese: "封装", explanation: "将数据与相关行为组织在一起并隐藏内部实现。", course: "Programming"),
-        Term(english: "polymorphism", chinese: "多态", explanation: "相同接口可以具有不同的具体实现。", course: "Programming"),
-        Term(english: "inheritance", chinese: "继承", explanation: "类型复用或扩展其他类型的行为。", course: "Programming"),
-        Term(english: "recursion", chinese: "递归", explanation: "通过调用自身解决更小的子问题。", course: "Programming"),
-        Term(english: "time complexity", chinese: "时间复杂度", explanation: "输入规模增长时，算法运行成本的增长方式。", course: "Programming"),
-        Term(english: "data structure", chinese: "数据结构", explanation: "组织和存储数据的方式。", course: "Programming"),
-        Term(english: "primary key", chinese: "主键", explanation: "唯一标识表中每一条记录的键。", course: "Database"),
-        Term(english: "foreign key", chinese: "外键", explanation: "引用另一张表的键，用于建立关联。", course: "Database"),
-        Term(english: "normalisation", chinese: "规范化", explanation: "组织关系表以减少冗余和更新异常。", course: "Database"),
-        Term(english: "normalization", chinese: "规范化", explanation: "组织关系表以减少冗余和更新异常。", course: "Database"),
-        Term(english: "transaction", chinese: "事务", explanation: "作为一个整体执行的一组数据库操作。", course: "Database"),
-        Term(english: "atomicity", chinese: "原子性", explanation: "事务的操作全部完成，或全部不生效。", course: "Database"),
-        Term(english: "eventual consistency", chinese: "最终一致性", explanation: "停止更新后，各副本经过一段时间最终趋于一致。", course: "Database"),
-        Term(english: "functional dependency", chinese: "函数依赖", explanation: "一组属性的值决定另一组属性的值。", course: "Database"),
-        Term(english: "regression", chinese: "回归分析", explanation: "用于研究变量之间关系的统计方法；此处为数据分析语境。", course: "Database"),
-        Term(english: "requirements", chinese: "需求", explanation: "系统应满足的功能或约束。", course: "Software Engineering"),
-        Term(english: "stakeholder", chinese: "利益相关者", explanation: "受系统影响、或能够影响系统的人或组织。", course: "Software Engineering"),
-        Term(english: "cohesion", chinese: "内聚性", explanation: "模块内部各部分围绕同一职责的紧密程度。", course: "Software Engineering"),
-        Term(english: "coupling", chinese: "耦合", explanation: "模块之间相互依赖的程度。", course: "Software Engineering"),
-        Term(english: "trade-off", chinese: "权衡", explanation: "改善一个方面可能需要牺牲另一个方面。", course: "General"),
-        Term(english: "trade off", chinese: "权衡", explanation: "改善一个方面可能需要牺牲另一个方面。", course: "General"),
-        Term(english: "whereas", chinese: "而／相比之下", explanation: "连接两个存在对比的情况。", course: "General"),
-        Term(english: "provided that", chinese: "前提是", explanation: "引出一个成立所需的条件。", course: "General")
-    ]
-
     private static var patterns: [String: NSRegularExpression] = [:]
     private static let patternLock = NSLock()
 
@@ -148,10 +99,9 @@ enum Glossary {
         regex(english).matches(in: text, range: NSRange(location: 0, length: (text as NSString).length)).last?.range
     }
 
-    static func matches(in text: String, terms: [Term], course: String, known: Set<String>) -> [Term] {
+    static func matches(in text: String, terms: [Term], known: Set<String>) -> [Term] {
         terms.filter { term in
-            !known.contains(term.id) && !known.contains(term.english.lowercased()) &&
-            (course == "All" || term.course == course || term.course == "General") && range(term.english, in: text) != nil
+            !known.contains(term.id) && !known.contains(term.english.lowercased()) && range(term.english, in: text) != nil
         }.sorted { $0.english.count > $1.english.count }
     }
 }
@@ -181,7 +131,7 @@ enum AutomaticTerms {
     static func detect(in visible: String, context: String, terms: [Term], known: Set<String>) -> [Term] {
         let globalScores = scores(String(context.suffix(1400)))
         let source = visible as NSString
-        let matches = Glossary.matches(in: visible, terms: terms, course: "All", known: known)
+        let matches = Glossary.matches(in: visible, terms: terms, known: known)
         let groups = Dictionary(grouping: matches, by: { $0.english.lowercased().replacingOccurrences(of: "-", with: " ") })
         var chosen: [(Term, NSRange)] = []
         for group in groups.values {
@@ -245,35 +195,47 @@ struct TokenPiece: Equatable { let text: String; let time: Double }
 
 /// Beam search can replace or remove earlier tokens. Rebuild only the word
 /// containing the first changed token and its suffix, including punctuation.
+/// Callers may pass only the tokens from `offset` onward when every earlier
+/// token is known to be final, so each update costs the revisable tail only.
 struct StreamingWords {
     private var tokens: [TokenPiece] = []
-    private var words: [WordStamp] = []
+    private(set) var words: [WordStamp] = []
     private var starts: [Int] = []
-    mutating func accept(_ next: [TokenPiece]) -> ([WordStamp], Int) {
-        var common = 0
-        while common < min(tokens.count, next.count), tokens[common] == next[common] { common += 1 }
-        if common == tokens.count && common == next.count { return (words, words.count) }
+    // The words joined by single spaces, maintained with the same suffix edits.
+    private var textBytes: [UInt8] = []
+    private var textEnds: [Int] = []
+    var text: String { String(decoding: textBytes, as: UTF8.self) }
+    var tokenCount: Int { tokens.count }
+
+    mutating func accept(_ next: [TokenPiece], from offset: Int = 0) -> ([WordStamp], Int) {
+        precondition(offset >= 0 && offset <= tokens.count, "unchanged prefix must already be known")
+        let total = offset + next.count
+        func piece(_ i: Int) -> TokenPiece { i < offset ? tokens[i] : next[i - offset] }
+        var common = offset
+        while common < min(tokens.count, total), tokens[common] == next[common - offset] { common += 1 }
+        if common == tokens.count && common == total { return (words, words.count) }
         var changed = starts.lastIndex(where: { $0 <= common }) ?? 0
         // A revised token may REMOVE a word boundary: "super key" becomes
         // "superkey". Include the preceding word when the old word's first
         // token now starts with a continuation, rather than retaining a stale
         // split in the display and archive.
-        if changed > 0, starts[changed] == common, common < next.count,
-           !next[common].text.hasPrefix("▁"), next[common].text.first?.isWhitespace != true {
+        if changed > 0, starts[changed] == common, common < total,
+           !piece(common).text.hasPrefix("▁"), piece(common).text.first?.isWhitespace != true {
             changed -= 1
         }
         let begin = starts.isEmpty ? 0 : starts[changed]
-        words = Array(words.prefix(changed)); starts = Array(starts.prefix(changed))
+        words.removeSubrange(changed...); starts.removeSubrange(changed...)
         var text = "", start = 0.0, end = 0.0, tokenStart = begin
         func append() {
             if !text.isEmpty { words.append(WordStamp(text: text, start: start, end: end)); starts.append(tokenStart) }
         }
-        for i in begin..<next.count {
-            let piece = next[i].text.replacingOccurrences(of: "▁", with: " ")
+        for i in begin..<total {
+            let token = piece(i)
+            let fragment = token.text.replacingOccurrences(of: "▁", with: " ")
             // NeMo can emit a standalone space-prefixed comma retrospectively.
             // It is punctuation, not a new spoken word with a delivery delay.
-            if !piece.contains(where: { $0.isLetter || $0.isNumber }), !piece.trimmingCharacters(in: .whitespaces).isEmpty {
-                let punctuation = piece.trimmingCharacters(in: .whitespaces)
+            if !fragment.contains(where: { $0.isLetter || $0.isNumber }), !fragment.trimmingCharacters(in: .whitespaces).isEmpty {
+                let punctuation = fragment.trimmingCharacters(in: .whitespaces)
                 if !text.isEmpty { text += punctuation }
                 else if let last = words.last {
                     words[words.count - 1] = WordStamp(text: last.text + punctuation, start: last.start, end: last.end)
@@ -281,12 +243,19 @@ struct StreamingWords {
                 }
                 continue
             }
-            if piece.first?.isWhitespace == true && !text.isEmpty { append(); text = "" }
-            if text.isEmpty { start = next[i].time; end = start + 0.08; tokenStart = i }
-            text += piece.trimmingCharacters(in: .whitespaces)
-            if piece.contains(where: { $0.isLetter || $0.isNumber }) { end = next[i].time + 0.08 }
+            if fragment.first?.isWhitespace == true && !text.isEmpty { append(); text = "" }
+            if text.isEmpty { start = token.time; end = start + 0.08; tokenStart = i }
+            text += fragment.trimmingCharacters(in: .whitespaces)
+            if fragment.contains(where: { $0.isLetter || $0.isNumber }) { end = token.time + 0.08 }
         }
-        append(); tokens = next
+        append()
+        tokens.removeSubrange(offset...); tokens.append(contentsOf: next)
+        let kept = min(changed, textEnds.count)
+        textBytes.removeSubrange((kept == 0 ? 0 : textEnds[kept - 1])...); textEnds.removeSubrange(kept...)
+        for word in words[kept...] {
+            if !textBytes.isEmpty { textBytes.append(0x20) }
+            textBytes.append(contentsOf: word.text.utf8); textEnds.append(textBytes.count)
+        }
         return (words, changed)
     }
 }
@@ -344,7 +313,7 @@ struct StreamingLatencyTracker {
         for old in previous.dropFirst(unchanged) { oldByTime[Int((old.word.start * 1000).rounded()), default: []].append(old) }
         var used: Set<Int> = []
         for (offset, word) in event.words.dropFirst(unchanged).enumerated() {
-            let key = Int((word.start * 1000).rounded()), text = LatencyTracker.tokens(word.text).joined(separator: " ")
+            let key = Int((word.start * 1000).rounded()), text = LexicalTokens.of(word.text).joined(separator: " ")
             var seen: Seen
             let index = unchanged + offset
             // Equivalent beam paths can realign timestamps long after the
@@ -410,15 +379,11 @@ struct CaptureHealth {
     }
 }
 
-struct LatencyTracker {
-    private(set) var samples: [Double] = []
-    private var pending: [RecognitionEvent] = []
-    private var finalized: Set<String> = []
-
+enum LexicalTokens {
     private static let wordPattern = try! NSRegularExpression(pattern: "[\\p{L}\\p{N}]+(?:['’][\\p{L}]+)?")
     private static let numbers = ["zero": "0", "one": "1", "two": "2", "three": "3", "four": "4", "five": "5", "six": "6", "seven": "7", "eight": "8", "nine": "9", "ten": "10"]
 
-    static func tokens(_ text: String) -> [String] {
+    static func of(_ text: String) -> [String] {
         let source = text.lowercased() as NSString
         return wordPattern.matches(in: source as String, range: NSRange(location: 0, length: source.length)).map {
             let token = source.substring(with: $0.range)
@@ -426,50 +391,4 @@ struct LatencyTracker {
             return numbers[token] ?? token
         }
     }
-
-    /// Volatile results often attach ONE audio range to the entire sentence, not
-    /// word timings. Align their text to the final word timings retrospectively.
-    /// Never treat finalization time as the word's first visible time.
-    mutating func accept(_ event: RecognitionEvent) -> Double? {
-        pending.append(event)
-        if pending.count > 2000 { pending.removeFirst(1000) }
-        guard event.isFinal else { return nil }
-        let key = String(format: "%.3f:%.3f", event.start, event.end)
-        guard finalized.insert(key).inserted else { return nil }
-        let words = event.words.flatMap { word in Self.tokens(word.text).map { (token: $0, end: word.end) } }
-        guard !words.isEmpty else { return nil }
-        let target = words.map(\.token)
-        var firstSeen = Array(repeating: event.received, count: words.count)
-        // The recognizer may move a segment's start when discarding initial
-        // silence. Match overlapping audio, then restrict each token by time.
-        for hypothesis in pending where hypothesis.start < event.end && hypothesis.end > event.start && hypothesis.received <= event.received {
-            let source = Self.tokens(hypothesis.text)
-            let n = target.count, m = source.count
-            guard m > 0, n <= 400, m <= 400 else { continue }
-            var lengths = Array(repeating: Array(repeating: 0, count: m + 1), count: n + 1)
-            for i in stride(from: n - 1, through: 0, by: -1) {
-                for j in stride(from: m - 1, through: 0, by: -1) {
-                    lengths[i][j] = target[i] == source[j] ? 1 + lengths[i + 1][j + 1] : max(lengths[i + 1][j], lengths[i][j + 1])
-                }
-            }
-            var i = 0, j = 0
-            while i < n && j < m {
-                if target[i] == source[j] {
-                    if words[i].end > hypothesis.start - 0.08 && words[i].end <= hypothesis.end + 0.08 {
-                        firstSeen[i] = min(firstSeen[i], hypothesis.received)
-                    }
-                    i += 1; j += 1
-                }
-                else if lengths[i + 1][j] >= lengths[i][j + 1] { i += 1 }
-                else { j += 1 }
-            }
-        }
-        let measurements = zip(words, firstSeen).map { max(0, $0.1 - $0.0.end) }
-        samples.append(contentsOf: measurements)
-        if samples.count > 10000 { samples.removeFirst(samples.count - 10000) }
-        pending.removeAll { $0.start < event.end - 0.005 }
-        return measurements.max()
-    }
-    var maximum: Double { samples.max() ?? 0 }
-    var overLimit: Int { samples.filter { $0 > 2 }.count }
 }

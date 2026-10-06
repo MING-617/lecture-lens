@@ -648,6 +648,21 @@ SherpaOnnxGetOnlineStreamResult(const SherpaOnnxOnlineRecognizer *recognizer,
                                 const SherpaOnnxOnlineStream *stream);
 
 /**
+ * @brief Lecture Lens: number of leading result tokens that decoding can no
+ * longer revise. Tokens before this index never change for this stream.
+ */
+SHERPA_ONNX_API int32_t
+SherpaOnnxOnlineStreamStableTokens(const SherpaOnnxOnlineStream *stream);
+
+/**
+ * @brief Lecture Lens: make later SherpaOnnxGetOnlineStreamResult() calls
+ * return only tokens from index @p first onward (text, tokens, timestamps).
+ * Timestamps remain relative to the start of the stream.
+ */
+SHERPA_ONNX_API void SherpaOnnxOnlineStreamSetResultStart(
+    const SherpaOnnxOnlineStream *stream, int32_t first);
+
+/**
  * @brief Destroy a result returned by SherpaOnnxGetOnlineStreamResult().
  *
  * @param r A pointer returned by SherpaOnnxGetOnlineStreamResult().

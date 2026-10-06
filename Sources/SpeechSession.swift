@@ -47,6 +47,17 @@ enum SessionError: LocalizedError {
     }
 }
 
+/// Strength, speech and timing for the audio processed since the last update.
+/// Batched to a few per second: one main-thread wakeup instead of three per buffer.
+struct AudioUpdate: Sendable {
+    var level = 0.0
+    var end = 0.0
+    var origin = 0.0
+    var speech = false
+    var queueWait = 0.0
+    var processing = 0.0
+}
+
 // submit() fills this private copy before handing it to the serial worker.
 // Neither the callback's original buffer nor the queued copy is mutated later.
 private struct OwnedAudioBuffer: @unchecked Sendable {
@@ -68,17 +79,17 @@ final class AudioFeeder: @unchecked Sendable {
     private var overflowReported = false
     private var samples: Int64 = 0
     private var lastText = ""
+    private var lastTextUptime = -Double.infinity
     private var pendingChange: Int?
-    let onLevel: @Sendable (Double, Double, Double) -> Void
+    private var update: AudioUpdate?
+    private var reportedEnd = 0.0
+    let onAudio: @Sendable (AudioUpdate) -> Void
     let onResult: @Sendable (RecognitionEvent) -> Void
     let onError: @Sendable (Error) -> Void
-    let onPerformance: @Sendable (Double, Double) -> Void
-    let onVoice: @Sendable (Bool) -> Void
     var enhanced: Bool { decoder.enhanced }
 
-    init(input: AVAudioFormat, model: URL, onLevel: @escaping @Sendable (Double, Double, Double) -> Void,
+    init(input: AVAudioFormat, model: URL, onAudio: @escaping @Sendable (AudioUpdate) -> Void,
          onResult: @escaping @Sendable (RecognitionEvent) -> Void, onError: @escaping @Sendable (Error) -> Void,
-         onPerformance: @escaping @Sendable (Double, Double) -> Void, onVoice: @escaping @Sendable (Bool) -> Void = { _ in },
          contextualTerms: [String] = [], paths: Int = 2, score: Float = 1,
          threads: Int = 2, provider: String = "cpu", qos: DispatchQoS.QoSClass = .background) throws {
         guard let format = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 16000, channels: 1, interleaved: false),
@@ -88,7 +99,7 @@ final class AudioFeeder: @unchecked Sendable {
         self.queue = DispatchQueue(label: "com.ming.lecturelens.streaming", qos: DispatchQoS(qosClass: qos, relativePriority: 0))
         self.decoder = try StreamingDecoder(model: model.path, contextualTerms: contextualTerms, paths: paths, score: score, threads: threads, provider: provider)
         self.voice = try VoiceActivity(model: model.appendingPathComponent("silero_vad.onnx"))
-        self.onLevel = onLevel; self.onResult = onResult; self.onError = onError; self.onPerformance = onPerformance; self.onVoice = onVoice
+        self.onAudio = onAudio; self.onResult = onResult; self.onError = onError
     }
     func submit(_ buffer: AVAudioPCMBuffer, at uptime: Double) {
         let duration = Double(buffer.frameLength) / buffer.format.sampleRate
@@ -130,10 +141,22 @@ final class AudioFeeder: @unchecked Sendable {
             samples += Int64(output.frameLength)
             let end = Double(samples) / 16000
             let rms = sqrt(values.reduce(0.0) { $0 + Double($1 * $1) } / Double(values.count))
-            onLevel(rms, end, origin); onVoice(voice.accept(values))
+            // Speech detection only feeds the status line. While captions are
+            // still changing, the teacher is evidently speaking; run the
+            // detector again once text has been quiet for a second.
+            let speech = started - lastTextUptime < 1 || voice.accept(values)
             if decoder.feed(values) { publish(final: false, origin: origin, end: end) }
-            onPerformance(max(0, started - uptime), ProcessInfo.processInfo.systemUptime - started)
+            var next = update ?? AudioUpdate()
+            next.level = rms; next.end = end; next.origin = origin; next.speech = next.speech || speech
+            next.queueWait = max(next.queueWait, started - uptime, 0)
+            next.processing = max(next.processing, ProcessInfo.processInfo.systemUptime - started)
+            update = next
+            if end >= reportedEnd + 0.25 { flushUpdate() }
         }
+    }
+    private func flushUpdate() {
+        guard let update else { return }
+        self.update = nil; reportedEnd = update.end; onAudio(update)
     }
     private func enqueue(_ work: @escaping @Sendable () -> Void) {
         if schedulingClass == .userInitiated { queue.async(execute: work) }
@@ -156,6 +179,7 @@ final class AudioFeeder: @unchecked Sendable {
             pendingChange = min(pendingChange ?? changed, changed); return
         }
         let now = ProcessInfo.processInfo.systemUptime
+        lastTextUptime = now
         var event = RecognitionEvent(received: now - origin, start: 0, end: end, text: text, isFinal: final, words: words)
         event.producedUptime = now
         event.changedFromWord = min(pendingChange ?? changed, changed)
@@ -166,7 +190,9 @@ final class AudioFeeder: @unchecked Sendable {
         lock.withLock { accepting = false; cancelled = cancel }
         await withCheckedContinuation { continuation in
             enqueue { [self] in
-                if !cancel, let origin = originValue { decoder.finish(); publish(final: true, origin: origin, end: Double(samples) / 16000) }
+                if !cancel, let origin = originValue {
+                    decoder.finish(); publish(final: true, origin: origin, end: Double(samples) / 16000); flushUpdate()
+                }
                 continuation.resume()
             }
         }
@@ -208,19 +234,23 @@ final class AudioFeeder: @unchecked Sendable {
                 self?.onResult?(delivered)
             }
         }
-        let level: @Sendable (Double, Double, Double) -> Void = { [weak self] rms, end, origin in DispatchQueue.main.async { self?.onLevel?(rms, end, origin) } }
+        let audio: @Sendable (AudioUpdate) -> Void = { [weak self] update in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.onLevel?(update.level, update.end, update.origin); self.onVoice?(update.speech)
+                self.onPerformance?(update.queueWait, update.processing)
+            }
+        }
         let failure: @Sendable (Error) -> Void = { [weak self] error in DispatchQueue.main.async { self?.onError?(error) } }
-        let performance: @Sendable (Double, Double) -> Void = { [weak self] wait, decode in DispatchQueue.main.async { self?.onPerformance?(wait, decode) } }
-        let speech: @Sendable (Bool) -> Void = { [weak self] detected in DispatchQueue.main.async { self?.onVoice?(detected) } }
         let paths = enhancementPaths, score = enhancementScore
         let threads = inferenceThreads, provider = inferenceProvider, qos = inferenceQoS
         let initialize: @Sendable () throws -> (AudioFeeder, String?) = {
             do {
-                let worker = try AudioFeeder(input: inputFormat, model: model, onLevel: level, onResult: result, onError: failure, onPerformance: performance, onVoice: speech, contextualTerms: contextualTerms, paths: paths, score: score, threads: threads, provider: provider, qos: qos)
+                let worker = try AudioFeeder(input: inputFormat, model: model, onAudio: audio, onResult: result, onError: failure, contextualTerms: contextualTerms, paths: paths, score: score, threads: threads, provider: provider, qos: qos)
                 return (worker, Optional<String>.none)
             } catch {
                 guard !contextualTerms.isEmpty else { throw error }
-                let normal = try AudioFeeder(input: inputFormat, model: model, onLevel: level, onResult: result, onError: failure, onPerformance: performance, onVoice: speech, threads: threads, provider: provider, qos: qos)
+                let normal = try AudioFeeder(input: inputFormat, model: model, onAudio: audio, onResult: result, onError: failure, threads: threads, provider: provider, qos: qos)
                 return (normal, Optional("专业词增强初始化失败，正在使用普通英文识别。"))
             }
         }
@@ -240,7 +270,7 @@ final class AudioFeeder: @unchecked Sendable {
         onEnhancement?(worker.enhanced, fallback ?? (!contextualTerms.isEmpty && !worker.enhanced ? "专业词增强未能启用，正在使用普通英文识别。" : nil))
         try Task.checkCancellation(); feeder = worker
     }
-    func startMicrophone(device: AudioDeviceID, localeID: String, contextualTerms: [String]) async throws {
+    func startMicrophone(device: AudioDeviceID, contextualTerms: [String]) async throws {
         let granted = await AVCaptureDevice.requestAccess(for: .audio)
         guard granted else { throw SessionError.microphone }; try Task.checkCancellation()
         let engine = AVAudioEngine(); self.engine = engine
@@ -262,7 +292,7 @@ final class AudioFeeder: @unchecked Sendable {
             Task { @MainActor in if let self, self.capturing { self.onError?(SessionError.interrupted) } }
         }
     }
-    func streamFile(url: URL, localeID: String, contextualTerms: [String], repetitions: Int = 1, maximumDuration: Double? = nil) async throws {
+    func streamFile(url: URL, contextualTerms: [String], repetitions: Int = 1, maximumDuration: Double? = nil) async throws {
         let file = try AVAudioFile(forReading: url)
         try await prepare(inputFormat: file.processingFormat, contextualTerms: contextualTerms); guard let feeder else { throw SessionError.format }
         let frames = AVAudioFrameCount(file.processingFormat.sampleRate / 10)

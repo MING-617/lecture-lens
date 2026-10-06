@@ -2,41 +2,33 @@ import Foundation
 
 @main struct CoreTests {
     static func main() {
-        var history = CaptionHistory()
-        history.accept(Caption(start: 0, end: 1, text: "A race", isFinal: false))
-        history.accept(Caption(start: 0, end: 2, text: "A race condition", isFinal: false))
-        assert(history.captions.count == 1 && history.captions[0].text == "A race condition", "hypotheses must replace, not duplicate")
-        history.accept(Caption(start: 0, end: 2, text: "A race condition.", isFinal: true))
-        history.accept(Caption(start: 2, end: 4, text: "We use locks.", isFinal: true))
-        assert(history.captions.count == 2 && history.captions[0].isFinal, "final text must survive subsequent ranges")
-        history.accept(Caption(start: 0, end: 2, text: "A race condition.", isFinal: true))
-        assert(history.captions.count == 2, "duplicate final result must not duplicate subtitle")
-        for i in 0..<400 { history.accept(Caption(start: Double(i + 5), end: Double(i + 6), text: "Sentence \(i)", isFinal: true)) }
-        assert(history.captions.count == 300, "a long lecture must keep bounded history")
-        let matches = Glossary.matches(in: "A DEADLOCK is unlike deadlocked code. Compare race condition and transaction.", terms: Glossary.defaults, course: "Systems", known: [])
-        assert(matches.contains { $0.english == "deadlock" })
-        assert(matches.contains { $0.english == "race condition" })
-        assert(Glossary.matches(in: "race conditions and primary keys", terms: Glossary.defaults, course: "All", known: []).count == 2, "common plurals must match term hints")
-        assert(!matches.contains { $0.english == "transaction" }, "course must disambiguate vocabulary")
-        assert(Glossary.matches(in: "deadlocked", terms: Glossary.defaults, course: "All", known: []).isEmpty, "substring matches must not produce false terms")
-        assert(Glossary.matches(in: "deadlock", terms: Glossary.defaults, course: "All", known: ["deadlock"]).isEmpty, "mastered terms must stay hidden")
+        // Demonstration terms, kept here as a small fixture for glossary matching.
+        let demo = [
+            Term(english: "race condition", chinese: "竞态条件", explanation: "", course: "Systems"),
+            Term(english: "deadlock", chinese: "死锁", explanation: "", course: "Systems"),
+            Term(english: "primary key", chinese: "主键", explanation: "", course: "Database"),
+            Term(english: "transaction", chinese: "事务", explanation: "", course: "Database")
+        ]
+        let matches = Glossary.matches(in: "A DEADLOCK is unlike deadlocked code. Compare race condition.", terms: demo, known: [])
+        assert(matches.map(\.english) == ["race condition", "deadlock"], "longer phrases sort first; whole words only")
+        assert(Glossary.matches(in: "race conditions and primary keys", terms: demo, known: []).count == 2, "common plurals must match term hints")
+        assert(Glossary.matches(in: "deadlocked", terms: demo, known: []).isEmpty, "substring matches must not produce false terms")
+        assert(Glossary.matches(in: "deadlock", terms: demo, known: ["deadlock"]).isEmpty, "mastered terms must stay hidden")
         let packURL = URL(fileURLWithPath: CommandLine.arguments[1])
         let pack = try! JSONDecoder().decode(CoursePack.self, from: Data(contentsOf: packURL))
         assert(pack.courses.count == 6 && pack.terms.count == 321)
         assert(Set(pack.terms.map(\.id)).count == pack.terms.count)
         assert(pack.terms.allSatisfy { !$0.source!.isEmpty && !($0.references ?? []).isEmpty })
         let databases = "5076"
-        let found = Glossary.matches(in: "Entities have attributes and relationships, but a register stores words.", terms: pack.terms, course: databases, known: [])
-        assert(Set(found.map(\.english)) == Set(["entity", "attribute", "relationship"]), "actual course isolation and entity/ies plural must work")
-        assert(Glossary.matches(in: "register words entity", terms: pack.terms, course: "None", known: []).isEmpty)
-        assert(Glossary.matches(in: "primary keys", terms: pack.terms, course: databases, known: [databases.lowercased() + "|primary key"]).isEmpty)
-        assert(Glossary.matches(in: "entity", terms: pack.terms, course: "5059", known: []).isEmpty)
+        let found = Glossary.matches(in: "Entities have attributes and relationships.", terms: pack.terms, known: [])
+        assert(Set(found.map(\.english)).isSuperset(of: ["entity", "attribute", "relationship"]), "entity/ies plural must work")
+        assert(!Glossary.matches(in: "primary keys", terms: pack.terms, known: [databases.lowercased() + "|primary key"]).contains { $0.course == databases && $0.english == "primary key" })
         let hardwareWord = Term(english: "word", chinese: "机器字", explanation: "", course: "hardware")
         let englishWord = Term(english: "word", chinese: "单词", explanation: "", course: "English")
         assert(hardwareWord.id != englishWord.id, "same spelling must preserve distinct course meanings")
         let legacy = try! JSONDecoder().decode(Term.self, from: Data(#"{"english":"custom","chinese":"自定义","explanation":"","course":"My course"}"#.utf8))
         assert(legacy.source == nil, "old custom preferences must decode without source")
-        assert(Glossary.matches(in: "user defined data types", terms: pack.terms, course: "4039", known: []).contains { $0.english == "user-defined data type" }, "ASR space/hyphen variation must match")
+        assert(Glossary.matches(in: "user defined data types", terms: pack.terms, known: []).contains { $0.english == "user-defined data type" }, "ASR space/hyphen variation must match")
         func hints(_ text: String, context: String? = nil, known: Set<String> = []) -> [Term] {
             AutomaticTerms.detect(in: text, context: context ?? text, terms: pack.terms, known: known)
         }
@@ -60,28 +52,6 @@ import Foundation
         let time = ProcessInfo.processInfo.systemUptime
         for _ in 0..<100 { _ = hints("SQL databases use candidate keys and foreign keys. A tuple is one row of a relation.") }
         print(String(format: "Automatic detection: %.2f ms per sample (100 runs, %d entries)", (ProcessInfo.processInfo.systemUptime - time) * 10, pack.terms.count))
-        var tracker = LatencyTracker()
-        _ = tracker.accept(RecognitionEvent(received: 1.2, start: 0, end: 1.1, text: "hello", isFinal: false, words: [WordStamp(text: "hello", start: 0, end: 1.1)]))
-        _ = tracker.accept(RecognitionEvent(received: 1.8, start: 0, end: 1.7, text: "hello world", isFinal: false, words: [WordStamp(text: "hello world", start: 0, end: 1.7)]))
-        let final = RecognitionEvent(received: 8, start: 0, end: 1.5, text: "hello world", isFinal: true, words: [WordStamp(text: "hello", start: 0, end: 0.5), WordStamp(text: "world", start: 1, end: 1.5)])
-        _ = tracker.accept(final)
-        _ = tracker.accept(final)
-        assert(tracker.samples.count == 2 && abs(tracker.maximum - 0.7) < 0.001, "late finalization and aggregate provisional ranges must not inflate first-display latency")
-        _ = tracker.accept(RecognitionEvent(received: 4, start: 2, end: 2.5, text: "new", isFinal: false, words: []))
-        _ = tracker.accept(RecognitionEvent(received: 8, start: 2, end: 2.5, text: "new term", isFinal: true, words: [WordStamp(text: "new", start: 2, end: 2.2), WordStamp(text: "term", start: 2.2, end: 2.5)]))
-        assert(tracker.overLimit == 1, "a word that only appears at finalization must count as late")
-        var numbers = LatencyTracker()
-        _ = numbers.accept(RecognitionEvent(received: 1, start: 0, end: 1, text: "compare 2", isFinal: false, words: []))
-        _ = numbers.accept(RecognitionEvent(received: 5, start: 0, end: 1, text: "compare two", isFinal: true, words: [WordStamp(text: "compare", start: 0, end: 0.5), WordStamp(text: "two", start: 0.5, end: 1)]))
-        assert(numbers.maximum == 0.5 && numbers.overLimit == 0, "numeral formatting must not be counted as late caption delivery")
-        var shifted = LatencyTracker()
-        _ = shifted.accept(RecognitionEvent(received: 5.2, start: 0, end: 5, text: "hello", isFinal: false, words: []))
-        _ = shifted.accept(RecognitionEvent(received: 12, start: 4, end: 5, text: "hello", isFinal: true, words: [WordStamp(text: "hello", start: 4, end: 5)]))
-        assert(abs(shifted.maximum - 0.2) < 0.001, "moving a final segment start past initial silence must retain its earlier visible words")
-        var separate = LatencyTracker()
-        _ = separate.accept(RecognitionEvent(received: 1.2, start: 0, end: 1, text: "hello", isFinal: false, words: []))
-        _ = separate.accept(RecognitionEvent(received: 6, start: 3, end: 4, text: "hello", isFinal: true, words: [WordStamp(text: "hello", start: 3, end: 4)]))
-        assert(separate.maximum == 2, "a repeated word in nonoverlapping audio must not steal an earlier appearance")
         var streaming = StreamingLatencyTracker()
         _ = streaming.accept(RecognitionEvent(received: 0.8, start: 0, end: 0.7, text: "hello", isFinal: false, words: [WordStamp(text: "hello", start: 0.2, end: 0.6)]))
         _ = streaming.accept(RecognitionEvent(received: 1.2, start: 0, end: 1.1, text: "hello world", isFinal: false, words: [WordStamp(text: "hello", start: 0.2, end: 0.6), WordStamp(text: "world", start: 0.8, end: 1)]))
@@ -115,6 +85,6 @@ import Foundation
         health.text(at: 15); assert(health.state(at: 15.1) == .speaking)
         health.audio(speech: false, at: 16); assert(health.state(at: 16) == .waiting)
         assert(health.state(at: 19.1) == .interrupted, "missing audio buffers must be distinguished from a teacher pausing")
-        print("PASS: hypothesis replacement, final preservation, duplicate handling, bounded history, glossary boundaries/course/known, first-display latency and limit warning")
+        print("PASS: glossary boundaries/plurals/known, automatic hints, streaming first-display latency and limit warning, bounded caption lines, capture health")
     }
 }

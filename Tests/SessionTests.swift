@@ -6,7 +6,7 @@ import Foundation
     var cancelled = false
     var last: RecognitionEvent?
     var vocabulary: [String] = []
-    override func startMicrophone(device: UInt32, localeID: String, contextualTerms: [String]) async throws {
+    override func startMicrophone(device: UInt32, contextualTerms: [String]) async throws {
         vocabulary = contextualTerms
         onEnhancement?(!contextualTerms.isEmpty, nil)
     }

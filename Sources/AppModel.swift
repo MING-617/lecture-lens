@@ -3,6 +3,12 @@ import AppKit
 import AVFoundation
 import CoreAudio
 
+/// The microphone strength bar refreshes a few times per second. Keeping it
+/// out of AppModel stops each refresh from re-rendering the whole window.
+@MainActor final class MeterModel: ObservableObject {
+    @Published var level = 0.0
+}
+
 @MainActor final class AppModel: ObservableObject {
     @Published var history = CaptionHistory()
     @Published var frozen: [Caption]?
@@ -11,18 +17,18 @@ import CoreAudio
     @Published var running = false
     @Published var preparing = false
     @Published var stopping = false
-    @Published var meter = 0.0
+    let meter = MeterModel()
     @Published var latency: Double?
     // Caption/latency publications already refresh the UI on every result.
     // Publishing this large internal value too would copy its old word array
     // through the property wrapper before each in-place suffix update.
     private(set) var tracker = StreamingLatencyTracker()
-    @Published var maximumQueueWait = 0.0
-    @Published var maximumDecodeTime = 0.0
+    // Shown only in the latency tooltip, which refreshes with each caption.
+    private(set) var maximumQueueWait = 0.0
+    private(set) var maximumDecodeTime = 0.0
     @Published var stalled = false
     @Published var devices = InputDevice.list()
     @Published var device: UInt32 = InputDevice.recommended()
-    @Published var locale = "en-GB"
     @Published var fontSize = 30.0
     @Published var chineseHints = true
     @Published var floatWindow = false
@@ -52,7 +58,6 @@ import CoreAudio
     private var session: SpeechSession?
     private var startTask: Task<Void, Never>?
     private var watchdog: Timer?
-    private var lastMeterPublish = 0.0
     private var currentAudioEnd = 0.0
     private var hintCache: (text: String, context: String, values: [Term])?
     private let preferenceURL: URL
@@ -67,11 +72,8 @@ import CoreAudio
             terms = pack.terms; courseInfo = pack.courses
         }
         if let data = try? Data(contentsOf: self.preferenceURL), let value = try? JSONDecoder().decode(Preferences.self, from: data) {
-            // Preserve user edits/imports while hiding exact old demonstration entries.
-            let saved = value.terms.filter { term in
-                !(term.source ?? "").hasPrefix("课件核对：") &&
-                ((value.version ?? 1) >= 2 || !Glossary.defaults.contains { $0.english == term.english && $0.chinese == term.chinese && $0.explanation == term.explanation && $0.course == term.course })
-            }
+            // Preserve user edits/imports; course-pack entries come from the bundle.
+            let saved = value.terms.filter { !($0.source ?? "").hasPrefix("课件核对：") }
             for term in saved { terms.removeAll { $0.id == term.id }; terms.append(term) }
             known = value.known
             enhanceTerms = value.enhanceTerms ?? true
@@ -117,7 +119,7 @@ import CoreAudio
         maximumQueueWait = 0; maximumDecodeTime = 0
         stalled = false; error = nil; preparing = true; saveFailed = false
         currentAudioEnd = 0; hintCache = nil; lastEvent = nil; health = CaptureHealth(); archive = nil
-        lastMeterPublish = 0; savedURL = nil
+        savedURL = nil
         enhancementActive = false; enhancementNotice = nil
         status = "正在准备麦克风和本地字幕文件…"
         let session = makeSession(); self.session = session
@@ -142,11 +144,9 @@ import CoreAudio
             if !self.stopping { self.status = "正在听 · 英文实时字幕" }
         }
         session.onLevel = { [weak self] rms, audioEnd, _ in
+            // Audio updates arrive batched, about four per second.
             guard let self, self.generation == token, !self.stopping else { return }
-            let now = ProcessInfo.processInfo.systemUptime
-            // Caption delivery stays immediate; only the strength indicator
-            // and hint-expiry clock need this slower refresh.
-            if now - self.lastMeterPublish > 0.25 { self.currentAudioEnd = audioEnd; self.meter = min(1, rms * 12); self.lastMeterPublish = now }
+            self.currentAudioEnd = audioEnd; self.meter.level = min(1, rms * 12)
         }
         session.onVoice = { [weak self] detected in
             guard let self, self.generation == token, !self.stopping else { return }
@@ -171,12 +171,16 @@ import CoreAudio
                         self.saveFailed = true; self.error = "字幕自动保存失败：" + error.localizedDescription
                     }
                 }
-                try await session.startMicrophone(device: device, localeID: locale, contextualTerms: vocabulary)
+                try await session.startMicrophone(device: device, contextualTerms: vocabulary)
                 try Task.checkCancellation(); guard generation == token else { throw CancellationError() }
                 preparing = false; running = true; health.audio(speech: false, at: ProcessInfo.processInfo.systemUptime); status = "正在听 · 等待老师讲话"
-                watchdog = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
-                    Task { @MainActor in self?.checkDelay() }
+                // Thresholds are three seconds; a tolerant half-second check
+                // lets macOS coalesce this wakeup with other timers.
+                let timer = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
+                    MainActor.assumeIsolated { self?.checkDelay() }
                 }
+                timer.tolerance = 0.25
+                RunLoop.main.add(timer, forMode: .common); watchdog = timer
             } catch {
                 await session.cancel()
                 guard generation == token, !stopping else { return }
@@ -239,7 +243,7 @@ import CoreAudio
             }
             do { try await archive?.finish(reason: reason) } catch { saveFailed = true; self.error = "字幕保存失败：" + error.localizedDescription }
             // Invalidate every old callback before permitting a new session.
-            generation = UUID(); session = nil; stopping = false; meter = 0; stalled = false; refreshDevices()
+            generation = UUID(); session = nil; stopping = false; meter.level = 0; stalled = false; refreshDevices()
             status = saveFailed ? "已停止 · 字幕保存发生错误" : "已停止 · 完整字幕已保存在本地"
             if !saveFailed { perform(action) }
         }
@@ -271,7 +275,7 @@ import CoreAudio
             let lines = text.components(separatedBy: .newlines).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty && !$0.hasPrefix("#") }
             var imported: [Term] = []
             for (index, line) in lines.enumerated() {
-                let fields = line.components(separatedBy: "\t")
+                let fields = line.components(separatedBy: "\t").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                 guard fields.count >= 2, !fields[0].isEmpty, !fields[1].isEmpty else {
                     throw NSError(domain: "Glossary", code: 1, userInfo: [NSLocalizedDescriptionKey: "第 \(index + 1) 行格式不正确。请用 Tab 分隔英文和中文。"])
                 }

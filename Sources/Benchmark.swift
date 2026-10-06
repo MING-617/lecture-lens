@@ -94,7 +94,7 @@ enum Benchmark {
         session.onPerformance = { wait, time in queueWait = max(queueWait, wait); processing = max(processing, time) }
         let start = ProcessInfo.processInfo.systemUptime
         do {
-            try await session.streamFile(url: URL(fileURLWithPath: input), localeID: "en", contextualTerms: vocabulary)
+            try await session.streamFile(url: URL(fileURLWithPath: input), contextualTerms: vocabulary)
             await session.finish()
         } catch { errors.append(error.localizedDescription); await session.cancel() }
         let activeCPUEnd = cpuSeconds(), activeWallEnd = ProcessInfo.processInfo.systemUptime

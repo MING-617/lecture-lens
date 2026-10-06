@@ -5,10 +5,9 @@ import Foundation
         let total = (event.words.count + 11) / 12
         return (max(0, total - 300)..<total).map { group in
             let words = event.words[(group * 12)..<min(group * 12 + 12, event.words.count)]
-            return Caption(start: words.first!.start, end: words.last!.end,
+            return Caption(id: "stream-\(event.start)-\(group)", start: words.first!.start, end: words.last!.end,
                            text: words.map(\.text).joined(separator: " "),
-                           isFinal: event.isFinal || group < total - 1,
-                           stableID: "stream-\(event.start)-\(group)")
+                           isFinal: event.isFinal || group < total - 1)
         }
     }
     static func main() {
@@ -40,7 +39,7 @@ import Foundation
             case 6: words.append(contentsOf: (0..<3700).map { _ in word() })
             case 7: start = 100 // Different stream identity must invalidate cached lines.
             case 8: history.clear()
-            case 9: history.accept(Caption(start: -1, end: 0, text: "legacy", isFinal: true))
+            case 9: words.append(contentsOf: (0..<11).map { _ in word() })
             case 10: words = Array(words.prefix((words.count / 24) * 12)) // Exact line-boundary rollback.
             case 11: words = []
             default: words.append(word())
@@ -55,6 +54,6 @@ import Foundation
             assert(history.captions.count <= 300)
             previous = words
         }
-        print("PASS: 1,200 independent full-rebuild comparisons: appends, arbitrary revisions, inserts, deletions, rollback across 300-line cap, timestamp/punctuation changes, finalization, empty results, stream changes and legacy events")
+        print("PASS: 1,200 independent full-rebuild comparisons: appends, arbitrary revisions, inserts, deletions, rollback across 300-line cap, timestamp/punctuation changes, finalization, empty results, stream changes and events without revision metadata")
     }
 }
