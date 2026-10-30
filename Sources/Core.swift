@@ -356,6 +356,52 @@ struct StreamingLatencyTracker {
     }
 }
 
+/// Boost quiet, distant speech before recognition. The model emits almost
+/// nothing below roughly -65 dBFS, which is where a teacher across a large
+/// room can land on a laptop microphone. Only ever amplifies: speech that is
+/// already loud enough reaches the recognizer unchanged. The boost is capped
+/// so a silent room's noise floor stays quiet and cannot turn into words.
+struct InputGain {
+    static let blockSize = 160               // 10 ms at 16 kHz
+    static let speechTarget: Float = 0.02    // loud parts of speech near -34 dBFS
+    static let noiseCeiling: Float = 0.003   // quietest 10 ms blocks stay below ~-50 dBFS after the boost
+    static let maximumGain: Float = 63       // +36 dB
+    static let quietBlocksBeforeBoost = 50   // half a second of speech that is clearly too quiet
+    private(set) var gain: Float = 1
+    private var floor: Float = 1
+    // Loudness of the louder parts of speech: rises at once, falls slowly,
+    // so the soft start or end of a word does not look like a distant voice.
+    private var speechLevel: Float?
+    private var quietBlocks = 0
+
+    mutating func process(_ samples: inout [Float]) {
+        var start = 0
+        while start < samples.count {
+            let end = min(samples.count, start + Self.blockSize)
+            var energy: Float = 0
+            for i in start..<end { energy += samples[i] * samples[i] }
+            let rms = (energy / Float(end - start)).squareRoot() + 1e-7
+            // Noise floor: follows quiet blocks at once, rises slowly.
+            floor = min(rms, floor * 1.0005 + 1e-7)
+            if rms > floor * 3 {
+                let level = speechLevel.map { rms > $0 ? $0 + (rms - $0) * 0.5 : $0 * 0.998 + rms * 0.002 } ?? rms
+                speechLevel = level
+                quietBlocks = level < Self.speechTarget ? quietBlocks + 1 : 0
+            }
+            var wanted: Float = 1
+            if let speechLevel, quietBlocks >= Self.quietBlocksBeforeBoost {
+                wanted = max(1, min(Self.speechTarget / speechLevel, Self.noiseCeiling / floor, Self.maximumGain))
+            }
+            // Fall quickly when speech gets louder; rise over about half a second.
+            gain += (wanted - gain) * (wanted < gain ? 0.05 : 0.02)
+            if gain > 1.0001 {
+                for i in start..<end { samples[i] = max(-1, min(1, samples[i] * gain)) }
+            }
+            start = end
+        }
+    }
+}
+
 struct CaptureHealth {
     enum State: Equatable { case waiting, speaking, noText, interrupted }
     private var lastBuffer = 0.0

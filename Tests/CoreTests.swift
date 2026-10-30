@@ -77,6 +77,30 @@ import Foundation
         let manyWords = (0..<4000).map { WordStamp(text: "x", start: Double($0), end: Double($0 + 1)) }
         lines.acceptStreaming(RecognitionEvent(received: 4001, start: 0, end: 4000, text: "", isFinal: false, words: manyWords))
         assert(lines.captions.count == 300 && Set(lines.captions.map(\.id)).count == 300, "long continuous speech must retain a bounded set of unique short lines")
+        // Input gain: synthetic "speech" = 200 ms tone bursts with pauses over a noise floor.
+        func talk(_ level: Float, noise: Float, seconds: Int) -> [Float] {
+            var seed: UInt32 = 7
+            return (0..<(seconds * 16000)).map { i in
+                seed = seed &* 1664525 &+ 1013904223
+                let hiss = (Float(seed >> 8) / Float(1 << 24) - 0.5) * 2 * noise * 1.7
+                let on = (i / 3200) % 2 == 0
+                return hiss + (on ? level * 1.414 * sin(Float(i) * 0.19) : 0)
+            }
+        }
+        func boosted(_ input: [Float]) -> (output: [Float], gain: Float) {
+            var gain = InputGain(), out: [Float] = []
+            var i = 0
+            while i < input.count { var piece = Array(input[i..<min(input.count, i + 1600)]); gain.process(&piece); out += piece; i += 1600 }
+            return (out, gain.gain)
+        }
+        let loud = talk(0.1, noise: 0.001, seconds: 6)
+        assert(boosted(loud).output == loud, "speech that is loud enough must reach the recognizer unchanged")
+        let quiet = boosted(talk(0.0005, noise: 0.00001, seconds: 6))
+        assert(quiet.gain > 20, "distant speech near -66 dBFS must be boosted, got \(quiet.gain)")
+        assert(quiet.output.allSatisfy { abs($0) <= 1 }, "boost never clips past full scale")
+        let room = boosted(talk(0, noise: 0.0003, seconds: 6))
+        assert(room.gain * 0.0003 <= InputGain.noiseCeiling * 1.5, "a silent room's noise must stay quiet, got gain \(room.gain)")
+        assert(boosted([Float](repeating: 0, count: 32000)).output.allSatisfy { $0 == 0 }, "digital silence stays silent")
         var health = CaptureHealth()
         for t in 1...10 { health.audio(speech: false, at: Double(t)) }
         assert(health.state(at: 10) == .waiting, "non-speech noise must not claim a speech-recognition stall")
@@ -85,6 +109,6 @@ import Foundation
         health.text(at: 15); assert(health.state(at: 15.1) == .speaking)
         health.audio(speech: false, at: 16); assert(health.state(at: 16) == .waiting)
         assert(health.state(at: 19.1) == .interrupted, "missing audio buffers must be distinguished from a teacher pausing")
-        print("PASS: glossary boundaries/plurals/known, automatic hints, streaming first-display latency and limit warning, bounded caption lines, capture health")
+        print("PASS: glossary boundaries/plurals/known, automatic hints, streaming first-display latency and limit warning, bounded caption lines, capture health, input gain boosts only quiet speech without clipping or raising room noise")
     }
 }

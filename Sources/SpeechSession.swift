@@ -64,6 +64,20 @@ private struct OwnedAudioBuffer: @unchecked Sendable {
     let value: AVAudioPCMBuffer
 }
 
+extension AVAudioPCMBuffer {
+    /// A private copy: capture callbacks reuse their buffers.
+    func copied() -> AVAudioPCMBuffer? {
+        guard let copy = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameLength) else { return nil }
+        copy.frameLength = frameLength
+        let source = UnsafeMutableAudioBufferListPointer(mutableAudioBufferList)
+        let target = UnsafeMutableAudioBufferListPointer(copy.mutableAudioBufferList)
+        for i in 0..<source.count {
+            if let src = source[i].mData, let dst = target[i].mData { memcpy(dst, src, Int(source[i].mDataByteSize)) }
+        }
+        return copy
+    }
+}
+
 final class AudioFeeder: @unchecked Sendable {
     let queue: DispatchQueue
     private let schedulingClass: DispatchQoS.QoSClass
@@ -74,6 +88,9 @@ final class AudioFeeder: @unchecked Sendable {
     private let lock = NSLock()
     private var originValue: Double?
     private var pendingSeconds = 0.0
+    // Audio recorded while the model loaded; allowed on top of the live limit.
+    private var backlogSeconds = 0.0
+    private var gain = InputGain()
     private var accepting = true
     private var cancelled = false
     private var overflowReported = false
@@ -101,29 +118,32 @@ final class AudioFeeder: @unchecked Sendable {
         self.voice = try VoiceActivity(model: model.appendingPathComponent("silero_vad.onnx"))
         self.onAudio = onAudio; self.onResult = onResult; self.onError = onError
     }
-    func submit(_ buffer: AVAudioPCMBuffer, at uptime: Double) {
+    func submit(_ buffer: AVAudioPCMBuffer, at uptime: Double) { schedule(buffer, at: uptime, backlog: false) }
+    /// Audio captured while the model was loading, oldest first. It is
+    /// processed ahead of live audio at a higher priority to catch up, and
+    /// does not count toward the live backlog limit.
+    func preload(_ buffers: [(buffer: AVAudioPCMBuffer, uptime: Double)]) {
+        for item in buffers { schedule(item.buffer, at: item.uptime, backlog: true) }
+    }
+    private func schedule(_ buffer: AVAudioPCMBuffer, at uptime: Double, backlog: Bool) {
         let duration = Double(buffer.frameLength) / buffer.format.sampleRate
         lock.lock()
         guard accepting else { lock.unlock(); return }
+        if backlog { backlogSeconds += duration }
         // Absorb a brief scheduling interruption without abandoning words.
-        // The backlog remains bounded below the three-second caption budget.
-        guard pendingSeconds + duration <= 1.5 else {
+        // The live backlog remains bounded below the three-second caption
+        // budget, plus whatever startup audio is still being caught up.
+        else if pendingSeconds + duration > 1.5 + backlogSeconds {
             accepting = false
             let report = !overflowReported; overflowReported = true
             lock.unlock(); if report { onError(SessionError.queueOverflow) }; return
-        }
-        pendingSeconds += duration; lock.unlock()
-        guard let copy = AVAudioPCMBuffer(pcmFormat: buffer.format, frameCapacity: buffer.frameLength) else { release(duration); return }
-        copy.frameLength = buffer.frameLength
-        let source = UnsafeMutableAudioBufferListPointer(buffer.mutableAudioBufferList)
-        let target = UnsafeMutableAudioBufferListPointer(copy.mutableAudioBufferList)
-        for i in 0..<source.count {
-            if let src = source[i].mData, let dst = target[i].mData { memcpy(dst, src, Int(source[i].mDataByteSize)) }
-        }
+        } else { pendingSeconds += duration }
+        lock.unlock()
+        guard let copy = buffer.copied() else { release(duration, backlog: backlog); return }
         let owned = OwnedAudioBuffer(value: copy)
-        enqueue { [self] in
+        enqueue(catchUp: backlog) { [self] in
             let copy = owned.value
-            defer { release(duration) }
+            defer { release(duration, backlog: backlog) }
             guard !lock.withLock({ cancelled }) else { return }
             if originValue == nil { originValue = uptime }
             let origin = originValue!
@@ -137,10 +157,13 @@ final class AudioFeeder: @unchecked Sendable {
             }
             guard status != .error else { onError(SessionError.conversion(error?.localizedDescription ?? "unknown")); return }
             guard output.frameLength > 0, let channel = output.floatChannelData?[0] else { return }
-            let values = Array(UnsafeBufferPointer(start: channel, count: Int(output.frameLength)))
+            var values = Array(UnsafeBufferPointer(start: channel, count: Int(output.frameLength)))
             samples += Int64(output.frameLength)
             let end = Double(samples) / 16000
+            // The strength bar shows the microphone as it is; recognition and
+            // speech detection hear quiet, distant speech boosted.
             let rms = sqrt(values.reduce(0.0) { $0 + Double($1 * $1) } / Double(values.count))
+            gain.process(&values)
             // Speech detection only feeds the status line. While captions are
             // still changing, the teacher is evidently speaking; run the
             // detector again once text has been quiet for a second.
@@ -158,18 +181,22 @@ final class AudioFeeder: @unchecked Sendable {
         guard let update else { return }
         self.update = nil; reportedEnd = update.end; onAudio(update)
     }
-    private func enqueue(_ work: @escaping @Sendable () -> Void) {
+    private func enqueue(catchUp: Bool = false, _ work: @escaping @Sendable () -> Void) {
         if schedulingClass == .userInitiated { queue.async(execute: work) }
         else {
             // Audio callbacks and UI callers must not promote inference work
             // back to performance priority. The bounded queue still reports
             // overload instead of accumulating delayed lecture audio.
-            let qos = schedulingClass == .background && lock.withLock({ pendingSeconds >= 0.5 })
+            let qos = schedulingClass == .background && (catchUp || lock.withLock({ pendingSeconds + backlogSeconds >= 0.5 }))
                 ? DispatchQoS.QoSClass.utility : schedulingClass
             queue.async(qos: DispatchQoS(qosClass: qos, relativePriority: 0), flags: .enforceQoS, execute: work)
         }
     }
-    private func release(_ duration: Double) { lock.lock(); pendingSeconds = max(0, pendingSeconds - duration); lock.unlock() }
+    private func release(_ duration: Double, backlog: Bool) {
+        lock.withLock {
+            if backlog { backlogSeconds = max(0, backlogSeconds - duration) } else { pendingSeconds = max(0, pendingSeconds - duration) }
+        }
+    }
     private func publish(final: Bool, origin: Double, end: Double) {
         let (text, words, changed) = decoder.result()
         // Reading a result advances the parser even if only token timings
@@ -199,6 +226,32 @@ final class AudioFeeder: @unchecked Sendable {
     }
 }
 
+/// Microphone audio captured while the model loads. Once the worker exists it
+/// receives the held audio first, in order, then every later buffer directly,
+/// so the first words of a lecture are not lost to model loading.
+final class StartupAudio: @unchecked Sendable {
+    static let limit = 6.0
+    private let lock = NSLock()
+    private var held: [(buffer: AVAudioPCMBuffer, uptime: Double)] = []
+    private var heldSeconds = 0.0
+    private var feeder: AudioFeeder?
+
+    func accept(_ buffer: AVAudioPCMBuffer, at uptime: Double) {
+        lock.lock()
+        if let feeder { lock.unlock(); feeder.submit(buffer, at: uptime); return }
+        defer { lock.unlock() }
+        guard let copy = buffer.copied() else { return }
+        held.append((copy, uptime)); heldSeconds += Double(copy.frameLength) / copy.format.sampleRate
+        // An unusually slow start keeps only the most recent seconds.
+        while heldSeconds > Self.limit, let first = held.first {
+            heldSeconds -= Double(first.buffer.frameLength) / first.buffer.format.sampleRate; held.removeFirst()
+        }
+    }
+    func attach(_ worker: AudioFeeder) {
+        lock.withLock { worker.preload(held); held = []; heldSeconds = 0; feeder = worker }
+    }
+}
+
 @MainActor class SpeechSession {
     private var engine: AVAudioEngine?
     private var feeder: AudioFeeder?
@@ -224,7 +277,7 @@ final class AudioFeeder: @unchecked Sendable {
     func prepare(inputFormat: AVAudioFormat, contextualTerms: [String] = []) async throws {
         guard let model = modelDirectory ?? Bundle.main.resourceURL?.appendingPathComponent("StreamingEnglish"),
               ["encoder.int8.onnx", "decoder.int8.onnx", "joiner.int8.onnx", "tokens.txt", "silero_vad.onnx"].allSatisfy({ FileManager.default.fileExists(atPath: model.appendingPathComponent($0).path) }) else { throw SessionError.unavailable }
-        onStatus?("正在载入本地流式英文识别…")
+        onStatus?("正在载入本地流式英文识别，已开始收音…")
         let result: @Sendable (RecognitionEvent) -> Void = { [weak self] event in
             DispatchQueue.main.async {
                 var delivered = event
@@ -281,16 +334,21 @@ final class AudioFeeder: @unchecked Sendable {
         }
         let format = input.outputFormat(forBus: 0)
         guard format.channelCount > 0, format.sampleRate > 0 else { throw SessionError.device }
-        try await prepare(inputFormat: format, contextualTerms: contextualTerms); try Task.checkCancellation(); guard let feeder else { throw SessionError.format }
+        // Listen before the model is ready; loading takes a few seconds and
+        // the teacher may already be speaking.
+        let startup = StartupAudio()
         input.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, time in
             let uptime = time.isHostTimeValid ? AVAudioTime.seconds(forHostTime: time.hostTime) : ProcessInfo.processInfo.systemUptime - Double(buffer.frameLength) / format.sampleRate
-            feeder.submit(buffer, at: uptime)
+            startup.accept(buffer, at: uptime)
         }
         tapInstalled = true
         engine.prepare(); try engine.start(); capturing = true
         configObserver = NotificationCenter.default.addObserver(forName: .AVAudioEngineConfigurationChange, object: engine, queue: .main) { [weak self] _ in
             Task { @MainActor in if let self, self.capturing { self.onError?(SessionError.interrupted) } }
         }
+        try await prepare(inputFormat: format, contextualTerms: contextualTerms); try Task.checkCancellation()
+        guard let feeder else { throw SessionError.format }
+        startup.attach(feeder)
     }
     func streamFile(url: URL, contextualTerms: [String], repetitions: Int = 1, maximumDuration: Double? = nil) async throws {
         let file = try AVAudioFile(forReading: url)

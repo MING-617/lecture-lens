@@ -57,5 +57,25 @@ final class AudioCount: @unchecked Sendable {
         assert(ProcessInfo.processInfo.systemUptime - origin < 3,
                "recovering a brief pause must not accumulate a long delayed session")
         print("PASS: a forced 1.1-second interruption recovers all 1.2 seconds of paced input without omission or overflow; completes under three seconds")
+        // Audio held while the model loads is processed first, then live audio,
+        // without tripping the live backlog limit.
+        let held = StartupAudio(), early = AudioCount(), earlyFailures = FailureCount()
+        let start = ProcessInfo.processInfo.systemUptime
+        for i in 0..<70 { held.accept(buffer, at: start + Double(i) * 0.1) }   // 7 s held; only the last 6 s are kept
+        let late = try AudioFeeder(input: format, model: URL(fileURLWithPath: CommandLine.arguments[1]),
+                                   onAudio: { early.accept($0.end) }, onResult: { _ in },
+                                   onError: { _ in earlyFailures.add() }, contextualTerms: ["foreign key"], score: 0.5)
+        held.attach(late)
+        let liveOrigin = ProcessInfo.processInfo.systemUptime
+        for i in 0..<12 {
+            let deadline = liveOrigin + Double(i + 1) * 0.1
+            let wait = deadline - ProcessInfo.processInfo.systemUptime
+            if wait > 0 { try await Task.sleep(for: .seconds(wait)) }
+            held.accept(buffer, at: deadline - 0.1)
+        }
+        await late.finish()
+        assert(earlyFailures.value == 0 && abs(early.seconds - 7.2) < 0.001,
+               "startup audio (6 s kept) and 1.2 s of live audio must all be processed, got \(early.seconds)")
+        print("PASS: audio captured during model loading (most recent 6 s) is processed before live audio without backlog errors")
     }
 }

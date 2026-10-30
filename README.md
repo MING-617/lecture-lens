@@ -2,7 +2,7 @@
 
 原生 macOS 英文实时字幕软件。用于线下听英文课：直接点击“开始”，看英文字幕；遇到已有词表中的专业词时，自动提示中文释义和课件出处。无需选择课程或章节。
 
-当前版本：**0.5.5 / build 13**。英文识别使用 Nemotron English 0.6B 560ms int8 和固定的 sherpa-onnx 源码提交 `3df7ada`，全部在本机处理，无需 API key。Silero VAD 只用于收音状态提示，不裁掉识别音频。
+当前版本：**0.5.6 / build 14**。英文识别使用 Nemotron English 0.6B 560ms int8 和固定的 sherpa-onnx 源码提交 `3df7ada`，全部在本机处理，无需 API key。Silero VAD 只用于收音状态提示，不裁掉识别音频。
 
 ## 使用
 
@@ -20,7 +20,7 @@
 要求 Apple Silicon Mac、macOS 26 或更新版本、Xcode Command Line Tools（Swift 编译器）及 Python 3.9 或更新版本。Python 仅用于构建工具，安装后的 app 不依赖 Python。
 
 ```sh
-python3 Scripts/fetch-dependencies.py --cache "$HOME/Library/Caches/LectureLens/build-0.5.5"
+python3 Scripts/fetch-dependencies.py --cache "$HOME/Library/Caches/LectureLens/build-0.5.6"
 ./build.sh
 # 安装到“应用程序”可使用：
 ./build.sh --install
@@ -37,6 +37,8 @@ python3 Scripts/fetch-dependencies.py --cache "$HOME/Library/Caches/LectureLens/
 0.5.4 修正了课越长越费电的问题：0.5.3 每一步都会重新处理整节课的识别结果，连续 60 分钟后每步解码慢 52%，取结果慢约 20 倍；0.5.4 全程不变，最终英文完全相同。模型改用标准 MLAS 内核，常驻内存从约 1.4 GB 降到约 0.8 GB，CPU 能量和字幕不变。字幕持续变化时跳过仅用于状态提示的静音检测；音量、状态等界面更新合并为每秒约 4 次。
 
 0.5.5 上课时把字幕写在本机不同步的文件夹，停止后再整份移入“文稿 / Lecture Lens 字幕”，所以 iCloud 只上传一次完成的文件，不再在上课期间每几秒上传一次。识别和字幕内容不变。
+
+0.5.6 改善远距离收音。老师离得远时，笔记本麦克风收到的声音可能低于约 -65 dBFS，模型几乎不出字，表现为讲了很久才开始有字幕。现在识别前会自动放大明显过小的语音（最多 +36 dB，并限制背景噪声的放大）；正常音量的声音不做任何处理。模拟后排（混响 1.2 秒、噪声 10 dB）的真人录音：原来 132 秒才出第一个词、91% 的词错误，现在约 2 秒出字、错词率约 7%；10 段正常音量测试音频的字幕逐字不变，纯噪声不会产生字幕。点“开始”后先打开麦克风，模型载入期间（最近 6 秒）的声音会在载入后补识别，不丢开头。混响本身仍会使错词率停留在约 5–7%，坐得近或使用外接麦克风效果更好。
 
 下载和恢复会检查源码／模型／补丁及头文件校验和；每个本地构建另存二进制校验收据。运行库的参考二进制哈希来自此设备，其他构建位置生成的 Mach-O 哈希可能不同。依赖及缓存不提交到 Git。第三方许可证保存在 `Resources/Licenses/`。
 
