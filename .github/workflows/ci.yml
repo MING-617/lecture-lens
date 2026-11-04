@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  secret-scan:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # scan the full history, not just the latest commit
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
+
+  portable-checks:
+    name: Scripts and data checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Compile Python scripts
+        run: python -m py_compile Scripts/*.py Tests/*.py
+      - name: Validate JSON resources
+        run: |
+          for f in $(git ls-files '*.json'); do
+            python -c 'import json, sys; json.load(open(sys.argv[1], encoding="utf-8"))' "$f"
+          done
+      - name: Prepare coursepack from portable glossary
+        run: python Scripts/prepare-coursepack.py Resources/coursepack.portable.json "$RUNNER_TEMP/coursepack.json"
+      - name: Python tests
+        run: |
+          for t in Tests/*Tests.py; do python "$t"; done
+
+  macos-build-test:
+    name: macOS build and test
+    # The app targets arm64-apple-macos26.0, so it needs an Apple Silicon macOS 26 runner.
+    runs-on: macos-26
+    timeout-minutes: 90
+    env:
+      DEPS_CACHE: ${{ github.workspace }}/.cache/dependencies
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Cache models and native runtime
+        uses: actions/cache@v4
+        with:
+          path: |
+            .cache/dependencies
+            Resources/StreamingEnglish/*.onnx
+            Resources/StreamingEnglish/tokens.txt
+            Vendor/SherpaOnnx/*.dylib
+          key: deps-${{ runner.os }}-${{ hashFiles('Resources/StreamingEnglish/model-manifest.json', 'Vendor/SherpaOnnx/checksums.json', 'Vendor/SherpaOnnx/bounded-revisions.patch') }}
+      - name: Fetch pinned dependencies (checksums verified)
+        run: python3 Scripts/fetch-dependencies.py --cache "$DEPS_CACHE"
+      - name: Test
+        run: ./Scripts/test.sh
+      - name: Build
+        run: LECTURELENS_ARCHIVE="$RUNNER_TEMP/Lecture Lens.zip" ./build.sh

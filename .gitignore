@@ -21,3 +21,5 @@ Resources/coursepack.json
 preferences.json
 *.log
 __pycache__/
+# Local environment overrides stay private; the template is committed.
+!.env.example
