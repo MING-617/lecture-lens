@@ -48,7 +48,7 @@ struct LensView: View {
         .sheet(isPresented: $model.showHelp, onDismiss: model.presentPendingStop) {
             VStack(alignment: .leading, spacing: 18) {
                 Text("使用 Lecture Lens").font(.title2.bold())
-                Text("1. 直接点击“开始”，无需选择课程或章节。\n2. 英文逐步出现，文字仍可能修正；专业词增强自动使用词表，中文开关只控制解释。\n3. 软件自动识别已有课程词表中的专业词，结合上下文显示中文提示；不确定的词义先不提示。\n4. “回看”只暂停画面；“回到实时”可追赶。\n5. “悬浮字幕”切换小窗口并置顶，不停止收音；“返回主界面”恢复原窗口。\n6. 点击术语旁的 ⓘ 看解释、来源与页码；“术语表”可搜索词条。\n7. 点击“停止”后，再点击“确认停止”；按回车默认继续听课。\n8. 上课期间屏幕保持常亮；麦克风设备变化时自动恢复收音，继续写入同一份字幕。")
+                Text("1. 直接点击“开始”，无需选择课程或章节。\n2. 英文逐步出现，文字仍可能修正；专业词增强自动使用词表，中文开关只控制解释。\n3. 软件自动识别已有课程词表中的专业词，结合上下文显示中文提示；不确定的词义先不提示。\n4. “回看”只暂停画面；“回到实时”可追赶。\n5. “悬浮字幕”切换小窗口并置顶，不停止收音；“返回主界面”恢复原窗口。\n6. 点击术语旁的 ⓘ 看解释、来源与页码；“术语表”可搜索词条。\n7. 点击“停止”后，再点击“确认停止”；按回车默认继续听课。\n8. 上课期间默认屏幕常亮，可取消“屏幕常亮”省电；麦克风设备变化时自动恢复收音，继续写入同一份字幕。")
                     .lineSpacing(8)
                 Text("字幕采用持续流式识别，最新词逐步补齐，前面的词不会等待长句最终校正。延迟根据模型词片时间戳估计，界面不截断超时读数。目标是持续跟上、控制在 2–3 秒以内；准确率和教室收音仍需现场检查。")
                     .font(.callout).foregroundStyle(.secondary)
@@ -127,6 +127,8 @@ struct LensView: View {
                 ForEach(model.devices) { Text($0.name).tag($0.id) }
             }.labelsHidden().frame(maxWidth: 220).disabled(model.running || model.preparing || model.stopping)
             Text("English · 实时").font(.callout).foregroundStyle(.secondary)
+            Toggle("屏幕常亮", isOn: $model.keepScreenOn).toggleStyle(.checkbox).font(.callout)
+                .help("上课时屏幕不熄灭、不自动锁屏。关闭可省电：屏幕按系统设置熄灭，字幕仍在后台识别和保存。随时切换，立即生效。")
             Spacer(minLength: 0)
             if model.preparing || model.stopping { ProgressView().controlSize(.small) }
             Button {

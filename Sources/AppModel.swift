@@ -39,6 +39,10 @@ import CoreAudio
     @Published var fontSize = 30.0 { didSet { if fontSize != oldValue { savePreferences() } } }
     @Published var chineseHints = true { didSet { if chineseHints != oldValue { savePreferences() } } }
     @Published var floatWindow = false { didSet { if floatWindow != oldValue { savePreferences() } } }
+    // Applies at once, including mid-lecture when the battery runs low.
+    @Published var keepScreenOn = true {
+        didSet { guard loaded, keepScreenOn != oldValue else { return }; savePreferences(); keepAwake(running || preparing) }
+    }
     @Published var compact = false
     @Published var enhanceTerms = true
     @Published var enhancementActive = false
@@ -71,7 +75,7 @@ import CoreAudio
     private var watchdog: Timer?
     private var currentAudioEnd = 0.0
     private var hintCache: (text: String, context: String, values: [Term])?
-    private var awake: NSObjectProtocol?
+    private var awake: (token: NSObjectProtocol, screen: Bool)?
     private var recoveries: [String] = []
     private var noticeTask: Task<Void, Never>?
     /// nil: never chosen; "": system default input; otherwise a device UID.
@@ -84,6 +88,7 @@ import CoreAudio
         var terms: [Term]; var known: Set<String>; var version: Int? = 5; var enhanceTerms: Bool? = nil
         // Optional so earlier preference files still load.
         var fontSize: Double? = nil; var chineseHints: Bool? = nil; var floatWindow: Bool? = nil; var microphone: String? = nil
+        var keepScreenOn: Bool? = nil
     }
 
     init(transcriptDirectory: URL? = nil, stagingDirectory: URL? = nil, preferenceURL: URL? = nil, makeSession: @escaping @MainActor () -> SpeechSession = { SpeechSession() }) {
@@ -106,6 +111,7 @@ import CoreAudio
             fontSize = min(54, max(20, value.fontSize ?? 30))
             chineseHints = value.chineseHints ?? true
             floatWindow = value.floatWindow ?? false
+            keepScreenOn = value.keepScreenOn ?? true
             preferredMicrophone = value.microphone
         }
         device = resolvedDevice()
@@ -113,7 +119,9 @@ import CoreAudio
     }
     var hasActiveSession: Bool { running || preparing || stopping }
     /// True while a session keeps the display awake.
-    var keepsDisplayAwake: Bool { awake != nil }
+    var keepsDisplayAwake: Bool { awake?.screen == true }
+    /// True while a session holds off App Nap and idle system sleep.
+    var preventsAppNap: Bool { awake != nil }
     func observeSystem() {
         guard observers.isEmpty else { return }
         recoverTranscripts()
@@ -147,16 +155,19 @@ import CoreAudio
         }
         return device == 0 || devices.contains(where: { $0.id == device }) ? device : InputDevice.recommended()
     }
-    /// Captions are read, not touched, so without this the display dims,
-    /// sleeps and locks a few minutes into a lecture. The activity also keeps
-    /// App Nap away while the window sits behind full-screen slides. Closing
-    /// the lid still sleeps, which stops the session as before.
-    private func keepAwake(_ on: Bool) {
-        if on, awake == nil {
-            awake = ProcessInfo.processInfo.beginActivity(options: [.userInitiated, .idleDisplaySleepDisabled], reason: "正在显示课堂实时字幕")
-        } else if !on, let awake {
-            ProcessInfo.processInfo.endActivity(awake); self.awake = nil
-        }
+    /// While a session runs, a user-initiated activity keeps App Nap and idle
+    /// system sleep away, so recognition is not throttled behind full-screen
+    /// slides and keeps saving if the display turns off. With "屏幕常亮" it also
+    /// stops the display dimming and locking a few minutes into a lecture,
+    /// since captions are read, not touched. Closing the lid still sleeps,
+    /// which stops the session as before.
+    private func keepAwake(_ session: Bool) {
+        let wanted = session ? keepScreenOn : nil
+        guard awake?.screen != wanted else { return }
+        if let awake { ProcessInfo.processInfo.endActivity(awake.token); self.awake = nil }
+        guard let screen = wanted else { return }
+        let options: ProcessInfo.ActivityOptions = screen ? [.userInitiated, .idleDisplaySleepDisabled] : [.userInitiated]
+        awake = (ProcessInfo.processInfo.beginActivity(options: options, reason: "正在显示课堂实时字幕"), screen)
     }
     private func show(notice text: String) {
         notice = text
@@ -396,7 +407,7 @@ import CoreAudio
         do {
             try FileManager.default.createDirectory(at: preferenceURL.deletingLastPathComponent(), withIntermediateDirectories: true)
             let custom = terms.filter { !($0.source ?? "").hasPrefix("课件核对：") }
-            let data = try JSONEncoder().encode(Preferences(terms: custom, known: known, enhanceTerms: enhanceTerms, fontSize: fontSize, chineseHints: chineseHints, floatWindow: floatWindow, microphone: preferredMicrophone))
+            let data = try JSONEncoder().encode(Preferences(terms: custom, known: known, enhanceTerms: enhanceTerms, fontSize: fontSize, chineseHints: chineseHints, floatWindow: floatWindow, microphone: preferredMicrophone, keepScreenOn: keepScreenOn))
             try data.write(to: preferenceURL, options: .atomic)
         } catch { self.error = "无法保存设置：\(error.localizedDescription)" }
     }

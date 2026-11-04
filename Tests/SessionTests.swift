@@ -40,6 +40,9 @@ import Foundation
         assert(!model.keepsDisplayAwake)
         model.start(); try await waitUntil { model.running }
         assert(model.keepsDisplayAwake, "a running session keeps the display awake")
+        model.keepScreenOn = false
+        assert(!model.keepsDisplayAwake && model.preventsAppNap, "turning the screen option off mid-session lets the display sleep but keeps recognition unthrottled")
+        model.keepScreenOn = true; assert(model.keepsDisplayAwake, "turning it back on applies at once")
         let first = mocks[0], stagedURL = model.savedURL!
         let recovered = try String(contentsOf: directory.appendingPathComponent("orphan.txt"), encoding: .utf8)
         assert(recovered.contains("unfinished words") && recovered.contains("recovered on next launch") && !FileManager.default.fileExists(atPath: orphan.path))
@@ -60,7 +63,8 @@ import Foundation
         model.requestStop(); model.confirmStop(); assert(first.halted && model.stopping && !model.running)
         try await waitUntil { !model.stopping }
         assert(first.finished && !model.hasActiveSession && model.status.contains("已停止"))
-        assert(!model.keepsDisplayAwake, "stopping releases the display")
+        assert(!model.keepsDisplayAwake && !model.preventsAppNap, "stopping releases the display and App Nap")
+        model.keepScreenOn = false; assert(!model.preventsAppNap, "the option alone holds nothing without a session")
         let firstURL = model.savedURL!
         assert(firstURL == directory.appendingPathComponent(stagedURL.lastPathComponent) && !FileManager.default.fileExists(atPath: stagedURL.path),
                "the finished transcript moves once into the transcript folder")
@@ -73,8 +77,9 @@ import Foundation
         model.setEnhancement(false)
         let restored = AppModel(transcriptDirectory: directory, preferenceURL: preferences)
         assert(!restored.enhanceTerms, "enhancement setting survives restart")
-        assert(restored.fontSize == 36 && restored.floatWindow && !restored.chineseHints && restored.device == 0,
-               "font size, pinning, Chinese hints and the chosen microphone survive restart")
+        assert(restored.fontSize == 36 && restored.floatWindow && !restored.chineseHints && restored.device == 0 && !restored.keepScreenOn,
+               "font size, pinning, Chinese hints, the screen option and the chosen microphone survive restart")
+        model.keepScreenOn = true
         model.start(); try await waitUntil { model.running }
         assert(model.savedURL != firstURL && model.history.captions.isEmpty)
         first.emit(e); assert(model.history.captions.isEmpty, "an old session cannot contaminate a new session")
@@ -102,9 +107,9 @@ import Foundation
         let legacy = directory.appendingPathComponent("legacy-preferences.json")
         try Data("{\"terms\":[],\"known\":[],\"version\":4}".utf8).write(to: legacy)
         let legacyModel = AppModel(transcriptDirectory: directory, preferenceURL: legacy)
-        assert(legacyModel.enhanceTerms && legacyModel.fontSize == 30 && legacyModel.chineseHints && !legacyModel.floatWindow,
+        assert(legacyModel.enhanceTerms && legacyModel.fontSize == 30 && legacyModel.chineseHints && !legacyModel.floatWindow && legacyModel.keepScreenOn,
                "legacy preferences default to enhancement enabled and the original display settings")
-        print("PASS: all English terms boost recognition independently of Chinese/known settings; setting is immutable while active and persists; display settings and microphone persist; the display stays awake only while a session runs; layout changes share session; old preferences remain readable")
+        print("PASS: all English terms boost recognition independently of Chinese/known settings; setting is immutable while active and persists; display settings and microphone persist; the display stays awake only while a session runs and the option can change mid-session; layout changes share session; old preferences remain readable")
         print("PASS: cancel leaves capture active; confirmed stop halts capture and finalizes all 4001 words; restart preserves files; old callbacks isolated; device interruption saves; a reopened input keeps the session and is noted in the transcript; save-path failure prevents unsafe start; staged recording moves into the transcript folder when finished; orphaned staging files are recovered")
     }
 }
