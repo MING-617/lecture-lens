@@ -4,6 +4,22 @@
 
 当前版本：**0.5.6 / build 14**。英文识别使用 Nemotron English 0.6B 560ms int8 和固定的 sherpa-onnx 源码提交 `3df7ada`，全部在本机处理，无需 API key。Silero VAD 只用于收音状态提示，不裁掉识别音频。
 
+## 功能
+
+- 本机离线英文实时字幕（不上传音频，无需 API key）
+- 专业词增强：六门课词表 + 自备英文词条，识别时提升专业词准确率
+- 术语提示：命中词表时显示中文释义和课件出处，可打开对应课件
+- 字幕自动保存与导出，回看／回到实时，悬浮字幕小窗，窗口置顶
+- 远距离弱音自动增益，模型载入期间的语音载入后补识别
+
+## 技术栈
+
+- 语言与界面：Swift 5（`swiftc` 直接编译，无 Xcode 工程）、SwiftUI／AppKit，目标 `arm64-apple-macos26.0`
+- 语音识别：[sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx)（固定提交 + 本仓库补丁）、ONNX Runtime 1.28.2、Nemotron English 0.6B streaming int8
+- 语音活动检测：Silero VAD（仅用于状态提示）
+- 构建与测试工具：zsh 脚本、Python 3.9+（下载校验依赖、生成词表、指标脚本）、CMake 3.31.6（自动安装到缓存）
+- CI：GitHub Actions（gitleaks 密钥扫描、脚本／数据检查、macOS 构建与测试）
+
 ## 使用
 
 - “开始”启动，“停止”请求确认。回车默认继续听课；确认停止才关闭收音并保存。运行中关闭主窗口或退出也需要确认。
@@ -18,6 +34,25 @@
 ## 从源码构建
 
 要求 Apple Silicon Mac、macOS 26 或更新版本、Xcode Command Line Tools（Swift 编译器）及 Python 3.9 或更新版本。Python 仅用于构建工具，安装后的 app 不依赖 Python。
+
+```sh
+# 1. 安装 Xcode Command Line Tools（已安装可跳过）
+xcode-select --install
+# 2. 获取源码
+git clone https://github.com/ming-617/lecture-lens.git
+cd lecture-lens
+# 3.（可选）配置环境变量，见下方“环境变量”
+cp .env.example .env   # 编辑后：set -a; source .env; set +a
+# 4. 下载并校验模型、构建原生运行库
+python3 Scripts/fetch-dependencies.py --cache "$HOME/Library/Caches/LectureLens/build-0.5.6"
+# 5. 运行测试
+./Scripts/test.sh
+# 6. 构建（生成 zip），或直接安装到“应用程序”
+./build.sh
+./build.sh --install
+```
+
+下面是同一流程的原有说明：
 
 ```sh
 python3 Scripts/fetch-dependencies.py --cache "$HOME/Library/Caches/LectureLens/build-0.5.6"
@@ -43,6 +78,34 @@ python3 Scripts/fetch-dependencies.py --cache "$HOME/Library/Caches/LectureLens/
 下载和恢复会检查源码／模型／补丁及头文件校验和；每个本地构建另存二进制校验收据。运行库的参考二进制哈希来自此设备，其他构建位置生成的 Mach-O 哈希可能不同。依赖及缓存不提交到 Git。第三方许可证保存在 `Resources/Licenses/`。
 
 构建结果默认位于 `~/LectureLensLocal/installers/Lecture Lens.zip`，不放在可能同步到 iCloud 的“文稿”里。可通过 `LECTURELENS_ARCHIVE` 指定其他 zip 路径。当前是本机临时签名的个人应用，未经过 Apple 公证；更新签名后 macOS 可能再次请求麦克风授权。
+
+## 环境变量
+
+本项目全部在本机识别，**不使用任何 API key、token 或密码**。以下变量均可选，只影响构建，模板见 `.env.example`（`.env` 已被 `.gitignore` 忽略）：
+
+| 变量名 | 用途 | 默认值 |
+| --- | --- | --- |
+| `LECTURELENS_MOODLE_DIR` | 课件资料根目录，用于定位术语出处 | `~/Desktop/Moodle课程资料` |
+| `LECTURELENS_ARCHIVE` | 构建输出 zip 的路径 | `~/LectureLensLocal/installers/Lecture Lens.zip` |
+
+以后如果加入需要密钥的功能，请只从环境变量或 macOS Keychain 读取，并把变量名（不含值）加到 `.env.example`。
+
+## 目录结构
+
+```text
+lecture-lens/
+├── Sources/                 # Swift 源码：界面、会话、流式解码、VAD、字幕存档
+├── Tests/                   # Swift／Python 测试与字幕语料 Fixtures
+├── Scripts/                 # 依赖下载与校验、原生库构建、词表生成、测试与对比脚本
+├── Resources/               # 图标、词表、识别配置、模型清单、第三方许可证
+├── Vendor/SherpaOnnx/       # C API 头文件、补丁、校验和（.dylib 不提交）
+├── docs/                    # 各版本验证记录与数值结果
+├── .github/workflows/ci.yml # CI：密钥扫描、脚本检查、macOS 构建测试
+├── build.sh                 # 构建、签名并打包 app
+├── Info.plist               # app 信息
+├── example-terms.tsv        # 自备词条示例
+└── .env.example             # 可选环境变量模板
+```
 
 ## 课程词表与资料路径
 
@@ -81,3 +144,17 @@ python3 Scripts/vocabulary-metrics.py Tests/Fixtures/caption-corpus/holdout.txt 
 0.5.4 的长课程开销与内存见 [验证记录](docs/VALIDATION-0.5.4.md)和[数值记录](docs/energy-results-0.5.4.json)。0.5.3 的原生线程、长字幕开销和两小时连续验证见 [验证记录](docs/VALIDATION-0.5.3.md)和[数值记录](docs/energy-results-0.5.3.json)。`Scripts/compare-helper-qos.py --help` 提供串行原生辅助线程对照；失败或字幕不同的组只保留原始数值，不计算节能比例。历史 0.5.2 的 CPU 能耗、准确率与延迟见 [调度验证](docs/VALIDATION-0.5.2.md)和[数值记录](docs/energy-results-0.5.2.json)。`--benchmark` 记录从模型就绪到完成释放的进程 CPU 用时、系统归因的 CPU 能量、性能核心时间占比，以及实际经过时间；旧报告仍可读取。`Scripts/compare-scheduling.py --help` 提供串行配置对照入口，原配置为 `baseline`，生产配置为 `two_background`；可重复指定顺序，例如 `--profiles baseline two_background two_background baseline`。`--threads`、`--qos` 和 `--provider` 只用于命令行诊断，不改变界面偏好；请求 Core ML 不代表实际 ANE 加速。CPU 能量不包含整机完整功耗，不能换算成电池续航提升比例。0.5.1 的等待休眠对照另见 [原记录](docs/VALIDATION-0.5.1.md)。
 
 历史验证包括两小时实时节奏输入和实际扬声器到麦克风测试，见 [验证记录](docs/VALIDATION.md)。目标是持续跟上并控制在 2–3 秒以内；测得延迟基于模型词片时间戳估计，遗漏词不计入，未测量屏幕绘制。真实教室后排、回声、老师口音和多人讲话仍需现场检查，不能保证所有单词正确或每个词都在 3 秒内出现。
+
+## CI 与密钥检查
+
+每次 push 到 `main` 和每个 Pull Request 会运行 `.github/workflows/ci.yml`：
+
+- **Secret scan**：用 gitleaks 扫描完整 git 历史，发现疑似密钥即失败。
+- **Scripts and data checks**：编译 Python 脚本、校验 JSON、生成 coursepack、运行 Python 测试（Ubuntu）。
+- **macOS build and test**：在 `macos-26` runner 上下载并校验依赖、运行 `./Scripts/test.sh` 和 `./build.sh`。
+
+提交前也可在本机运行同样的扫描（需先 `brew install gitleaks`）：
+
+```sh
+gitleaks git --config .gitleaks.toml .
+```

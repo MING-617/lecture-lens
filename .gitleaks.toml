@@ -1,0 +1,4 @@
+# Gitleaks configuration: use the upstream default rules.
+# Add [allowlist] entries here only for verified false positives — never for real keys.
+[extend]
+useDefault = true
