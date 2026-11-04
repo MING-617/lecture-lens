@@ -36,7 +36,10 @@ import Foundation
         let model = AppModel(transcriptDirectory: directory, stagingDirectory: staging, preferenceURL: preferences, makeSession: { let s = MockSession(); mocks.append(s); return s })
         model.terms = [Term(english: "foreign key", chinese: "外键", explanation: "", course: "5076"), Term(english: "Custom Widget", chinese: "自备术语", explanation: "", course: "General")]
         model.known = Set(model.terms.map(\.id)); model.chineseHints = false
+        model.fontSize = 36; model.floatWindow = true; model.device = 0
+        assert(!model.keepsDisplayAwake)
         model.start(); try await waitUntil { model.running }
+        assert(model.keepsDisplayAwake, "a running session keeps the display awake")
         let first = mocks[0], stagedURL = model.savedURL!
         let recovered = try String(contentsOf: directory.appendingPathComponent("orphan.txt"), encoding: .utf8)
         assert(recovered.contains("unfinished words") && recovered.contains("recovered on next launch") && !FileManager.default.fileExists(atPath: orphan.path))
@@ -57,6 +60,7 @@ import Foundation
         model.requestStop(); model.confirmStop(); assert(first.halted && model.stopping && !model.running)
         try await waitUntil { !model.stopping }
         assert(first.finished && !model.hasActiveSession && model.status.contains("已停止"))
+        assert(!model.keepsDisplayAwake, "stopping releases the display")
         let firstURL = model.savedURL!
         assert(firstURL == directory.appendingPathComponent(stagedURL.lastPathComponent) && !FileManager.default.fileExists(atPath: stagedURL.path),
                "the finished transcript moves once into the transcript folder")
@@ -69,6 +73,8 @@ import Foundation
         model.setEnhancement(false)
         let restored = AppModel(transcriptDirectory: directory, preferenceURL: preferences)
         assert(!restored.enhanceTerms, "enhancement setting survives restart")
+        assert(restored.fontSize == 36 && restored.floatWindow && !restored.chineseHints && restored.device == 0,
+               "font size, pinning, Chinese hints and the chosen microphone survive restart")
         model.start(); try await waitUntil { model.running }
         assert(model.savedURL != firstURL && model.history.captions.isEmpty)
         first.emit(e); assert(model.history.captions.isEmpty, "an old session cannot contaminate a new session")
@@ -78,10 +84,13 @@ import Foundation
         model.toggleCompact(); assert(model.compact && model.running && model.savedURL != firstURL)
         model.toggleCompact(); assert(!model.compact && model.running)
         second.emit(RecognitionEvent(received: 1, start: 0, end: 1, text: "hello", isFinal: false, words: [WordStamp(text: "hello", start: 0.2, end: 0.4)]))
+        second.onRecovery?("麦克风设备发生变化，已自动恢复收音。")
+        assert(model.running && model.notice?.contains("自动恢复") == true && model.error == nil, "a recovered input keeps the session running")
         model.interrupt("device disconnected"); try await waitUntil { !model.stopping }
         assert(second.halted && second.cancelled && !model.showStopConfirmation && model.error == "device disconnected")
         let secondSaved = try String(contentsOf: model.savedURL!, encoding: .utf8)
         assert(secondSaved.contains("hello") && secondSaved.contains("device disconnected"))
+        assert(secondSaved.contains("自动恢复收音：[00:00]"), "the transcript records when the input was reopened")
         // Starting cannot proceed if the transcript path cannot be created.
         let invalid = directory.appendingPathComponent("not-a-folder")
         try Data("existing file".utf8).write(to: invalid)
@@ -89,10 +98,13 @@ import Foundation
         let blocked = AppModel(transcriptDirectory: invalid, stagingDirectory: staging, preferenceURL: preferences, makeSession: { blockedSession })
         blocked.start(); try await waitUntil { !blocked.preparing }
         assert(!blocked.running && blocked.error != nil && blocked.savedURL == nil)
+        assert(!blocked.keepsDisplayAwake, "a failed start releases the display")
         let legacy = directory.appendingPathComponent("legacy-preferences.json")
         try Data("{\"terms\":[],\"known\":[],\"version\":4}".utf8).write(to: legacy)
-        assert(AppModel(transcriptDirectory: directory, preferenceURL: legacy).enhanceTerms, "legacy preferences default to enhancement enabled")
-        print("PASS: all English terms boost recognition independently of Chinese/known settings; setting is immutable while active and persists; layout changes share session; old preferences remain readable")
-        print("PASS: cancel leaves capture active; confirmed stop halts capture and finalizes all 4001 words; restart preserves files; old callbacks isolated; device interruption saves; save-path failure prevents unsafe start; staged recording moves into the transcript folder when finished; orphaned staging files are recovered")
+        let legacyModel = AppModel(transcriptDirectory: directory, preferenceURL: legacy)
+        assert(legacyModel.enhanceTerms && legacyModel.fontSize == 30 && legacyModel.chineseHints && !legacyModel.floatWindow,
+               "legacy preferences default to enhancement enabled and the original display settings")
+        print("PASS: all English terms boost recognition independently of Chinese/known settings; setting is immutable while active and persists; display settings and microphone persist; the display stays awake only while a session runs; layout changes share session; old preferences remain readable")
+        print("PASS: cancel leaves capture active; confirmed stop halts capture and finalizes all 4001 words; restart preserves files; old callbacks isolated; device interruption saves; a reopened input keeps the session and is noted in the transcript; save-path failure prevents unsafe start; staged recording moves into the transcript folder when finished; orphaned staging files are recovered")
     }
 }

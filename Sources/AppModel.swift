@@ -28,10 +28,17 @@ import CoreAudio
     private(set) var maximumDecodeTime = 0.0
     @Published var stalled = false
     @Published var devices = InputDevice.list()
-    @Published var device: UInt32 = InputDevice.recommended()
-    @Published var fontSize = 30.0
-    @Published var chineseHints = true
-    @Published var floatWindow = false
+    // Display settings and the chosen microphone are remembered between launches.
+    @Published var device: UInt32 = InputDevice.recommended() {
+        didSet {
+            guard loaded, !adjustingDevice, device != oldValue else { return }
+            preferredMicrophone = device == 0 ? "" : devices.first(where: { $0.id == device })?.uid
+            savePreferences()
+        }
+    }
+    @Published var fontSize = 30.0 { didSet { if fontSize != oldValue { savePreferences() } } }
+    @Published var chineseHints = true { didSet { if chineseHints != oldValue { savePreferences() } } }
+    @Published var floatWindow = false { didSet { if floatWindow != oldValue { savePreferences() } } }
     @Published var compact = false
     @Published var enhanceTerms = true
     @Published var enhancementActive = false
@@ -45,6 +52,8 @@ import CoreAudio
     @Published var showStopConfirmation = false
     @Published var savedURL: URL?
     @Published var saveFailed = false
+    /// Information that is not an error, such as an automatic recovery.
+    @Published var notice: String?
     enum StopAction { case session, close, quit }
     weak var window: NSWindow?
     private var pendingRequest: StopAction?
@@ -62,8 +71,20 @@ import CoreAudio
     private var watchdog: Timer?
     private var currentAudioEnd = 0.0
     private var hintCache: (text: String, context: String, values: [Term])?
+    private var awake: NSObjectProtocol?
+    private var recoveries: [String] = []
+    private var noticeTask: Task<Void, Never>?
+    /// nil: never chosen; "": system default input; otherwise a device UID.
+    private var preferredMicrophone: String?
+    private var adjustingDevice = false
+    // Settings assigned while loading must not be written back half-loaded.
+    private var loaded = false
     private let preferenceURL: URL
-    private struct Preferences: Codable { var terms: [Term]; var known: Set<String>; var version: Int? = 5; var enhanceTerms: Bool? = nil }
+    private struct Preferences: Codable {
+        var terms: [Term]; var known: Set<String>; var version: Int? = 5; var enhanceTerms: Bool? = nil
+        // Optional so earlier preference files still load.
+        var fontSize: Double? = nil; var chineseHints: Bool? = nil; var floatWindow: Bool? = nil; var microphone: String? = nil
+    }
 
     init(transcriptDirectory: URL? = nil, stagingDirectory: URL? = nil, preferenceURL: URL? = nil, makeSession: @escaping @MainActor () -> SpeechSession = { SpeechSession() }) {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("LectureLens", isDirectory: true)
@@ -82,9 +103,17 @@ import CoreAudio
             for term in saved { terms.removeAll { $0.id == term.id }; terms.append(term) }
             known = value.known
             enhanceTerms = value.enhanceTerms ?? true
+            fontSize = min(54, max(20, value.fontSize ?? 30))
+            chineseHints = value.chineseHints ?? true
+            floatWindow = value.floatWindow ?? false
+            preferredMicrophone = value.microphone
         }
+        device = resolvedDevice()
+        loaded = true
     }
     var hasActiveSession: Bool { running || preparing || stopping }
+    /// True while a session keeps the display awake.
+    var keepsDisplayAwake: Bool { awake != nil }
     func observeSystem() {
         guard observers.isEmpty else { return }
         recoverTranscripts()
@@ -104,7 +133,42 @@ import CoreAudio
     }
     func refreshDevices() {
         devices = InputDevice.list()
-        if !hasActiveSession, device != 0, !devices.contains(where: { $0.id == device }) { device = InputDevice.recommended() }
+        guard !hasActiveSession else { return }
+        let next = resolvedDevice()
+        // A temporary fallback must not replace the remembered microphone.
+        if next != device { adjustingDevice = true; device = next; adjustingDevice = false }
+    }
+    /// The remembered microphone when it is connected; otherwise the current
+    /// choice while it remains available, else the built-in microphone.
+    private func resolvedDevice() -> AudioDeviceID {
+        if let uid = preferredMicrophone {
+            if uid.isEmpty { return 0 }
+            if let match = devices.first(where: { $0.uid == uid }) { return match.id }
+        }
+        return device == 0 || devices.contains(where: { $0.id == device }) ? device : InputDevice.recommended()
+    }
+    /// Captions are read, not touched, so without this the display dims,
+    /// sleeps and locks a few minutes into a lecture. The activity also keeps
+    /// App Nap away while the window sits behind full-screen slides. Closing
+    /// the lid still sleeps, which stops the session as before.
+    private func keepAwake(_ on: Bool) {
+        if on, awake == nil {
+            awake = ProcessInfo.processInfo.beginActivity(options: [.userInitiated, .idleDisplaySleepDisabled], reason: "正在显示课堂实时字幕")
+        } else if !on, let awake {
+            ProcessInfo.processInfo.endActivity(awake); self.awake = nil
+        }
+    }
+    private func show(notice text: String) {
+        notice = text
+        noticeTask?.cancel()
+        noticeTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(20))
+            guard !Task.isCancelled, let self, self.notice == text else { return }
+            self.notice = nil
+        }
+    }
+    private static func clock(_ seconds: Double) -> String {
+        String(format: "[%02d:%02d]", Int(seconds) / 60, Int(seconds) % 60)
     }
     var displayed: [Caption] { frozen ?? history.captions }
     func toggleCompact() { compact.toggle(); if compact { frozen = nil } }
@@ -129,9 +193,10 @@ import CoreAudio
         maximumQueueWait = 0; maximumDecodeTime = 0
         stalled = false; error = nil; preparing = true; saveFailed = false
         currentAudioEnd = 0; hintCache = nil; lastEvent = nil; health = CaptureHealth(); archive = nil
-        savedURL = nil
+        savedURL = nil; recoveries = []; notice = nil
         enhancementActive = false; enhancementNotice = nil
         status = "正在准备麦克风和本地字幕文件…"
+        keepAwake(true)
         let session = makeSession(); self.session = session
         let vocabulary = enhanceTerms ? RecognitionVocabulary.phrases(terms.map(\.english)) : []
         if enhanceTerms && vocabulary.isEmpty { enhancementNotice = "未找到可用的专业词表，正在使用普通英文识别。" }
@@ -166,6 +231,12 @@ import CoreAudio
             guard let self, self.generation == token, !self.stopping else { return }
             self.interrupt(error.localizedDescription)
         }
+        session.onRecovery = { [weak self] message in
+            guard let self, self.generation == token, !self.stopping else { return }
+            let at = AppModel.clock(self.currentAudioEnd)
+            self.recoveries.append(at)
+            self.show(notice: "\(message)字幕时间 \(at)，中断期间的声音没有识别。")
+        }
         session.onPerformance = { [weak self] wait, decode in
             guard let self, self.generation == token else { return }
             if wait > self.maximumQueueWait { self.maximumQueueWait = wait }
@@ -194,6 +265,7 @@ import CoreAudio
             } catch {
                 await session.cancel()
                 guard generation == token, !stopping else { return }
+                keepAwake(false)
                 if let archive, let moved = try? await archive.finish(reason: "未开始：" + error.localizedDescription) { savedURL = moved }
                 self.session = nil; preparing = false; running = false
                 if !(error is CancellationError) { self.error = error.localizedDescription }
@@ -241,7 +313,7 @@ import CoreAudio
         let token = generation, wasPreparing = preparing, startup = startTask, ending = session
         startup?.cancel(); startTask = nil
         // Shut down the actual input synchronously, before waiting for any task.
-        ending?.haltCapture()
+        ending?.haltCapture(); keepAwake(false)
         watchdog?.invalidate(); watchdog = nil
         running = false; preparing = false; stopping = true; status = "正在停止并保存字幕…"
         Task {
@@ -251,7 +323,9 @@ import CoreAudio
             if let event = lastEvent {
                 archive?.accept(RecognitionEvent(received: event.received, start: event.start, end: event.end, text: event.text, isFinal: true, words: event.words))
             }
-            do { if let archive { savedURL = try await archive.finish(reason: reason) } }
+            // Times match the transcript's own [mm:ss] markers.
+            let reopened = recoveries.isEmpty ? "" : "；麦克风设备变化后自动恢复收音：" + recoveries.joined(separator: "、")
+            do { if let archive { savedURL = try await archive.finish(reason: reason + reopened) } }
             catch { saveFailed = true; self.error = "字幕保存失败：" + error.localizedDescription }
             // Invalidate every old callback before permitting a new session.
             generation = UUID(); session = nil; stopping = false; meter.level = 0; stalled = false; refreshDevices()
@@ -278,23 +352,30 @@ import CoreAudio
         guard !term.english.isEmpty, !term.chinese.isEmpty else { return }
         terms.removeAll { $0.id == term.id }; terms.append(term); savePreferences()
     }
-    func importTerms() {
+    /// Returns a summary for the glossary sheet; nil when cancelled or failed.
+    @discardableResult func importTerms() -> String? {
         let panel = NSOpenPanel(); panel.allowedContentTypes = [.tabSeparatedText, .plainText]; panel.allowsMultipleSelection = false
-        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard panel.runModal() == .OK, let url = panel.url else { return nil }
         do {
-            let text = try String(contentsOf: url, encoding: .utf8)
-            let lines = text.components(separatedBy: .newlines).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty && !$0.hasPrefix("#") }
-            var imported: [Term] = []
-            for (index, line) in lines.enumerated() {
+            var text = try String(contentsOf: url, encoding: .utf8)
+            if text.first == "\u{FEFF}" { text.removeFirst() }
+            var imported: [Term] = [], skipped = 0
+            // Number the file's own lines, so an error names the line to fix.
+            for (index, line) in text.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline).enumerated() {
+                guard !line.trimmingCharacters(in: .whitespaces).isEmpty, !line.hasPrefix("#") else { continue }
                 let fields = line.components(separatedBy: "\t").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                guard fields.count >= 2, !fields[0].isEmpty, !fields[1].isEmpty else {
+                guard fields.count >= 2, !fields[0].isEmpty else {
                     throw NSError(domain: "Glossary", code: 1, userInfo: [NSLocalizedDescriptionKey: "第 \(index + 1) 行格式不正确。请用 Tab 分隔英文和中文。"])
                 }
+                // Candidate lists from Scripts/extract-terms.py leave Chinese
+                // blank until reviewed; such rows wait for a later import.
+                guard !fields[1].isEmpty else { skipped += 1; continue }
                 imported.append(Term(english: fields[0], chinese: fields[1], explanation: fields.count > 2 ? fields[2] : "", course: fields.count > 3 && !fields[3].isEmpty ? fields[3] : "General", source: fields.count > 4 && !fields[4].isEmpty ? fields[4] : "导入文件：\(url.lastPathComponent)，课程适用性尚未核对"))
             }
             for term in imported { terms.removeAll { $0.id == term.id }; terms.append(term) }
             savePreferences()
-        } catch { self.error = error.localizedDescription }
+            return "已导入 \(imported.count) 个词条" + (skipped > 0 ? "，跳过 \(skipped) 行未填写中文的候选词" : "") + "。中文提示立即生效，专业词增强下次开始时生效。"
+        } catch { self.error = error.localizedDescription; return nil }
     }
     func exportCaptions() {
         guard let archive else { return }
@@ -311,12 +392,13 @@ import CoreAudio
     }
     private func savePreferences() {
         hintCache = nil
+        guard loaded else { return }
         do {
             try FileManager.default.createDirectory(at: preferenceURL.deletingLastPathComponent(), withIntermediateDirectories: true)
             let custom = terms.filter { !($0.source ?? "").hasPrefix("课件核对：") }
-            let data = try JSONEncoder().encode(Preferences(terms: custom, known: known, enhanceTerms: enhanceTerms))
+            let data = try JSONEncoder().encode(Preferences(terms: custom, known: known, enhanceTerms: enhanceTerms, fontSize: fontSize, chineseHints: chineseHints, floatWindow: floatWindow, microphone: preferredMicrophone))
             try data.write(to: preferenceURL, options: .atomic)
-        } catch { self.error = "无法保存术语设置：\(error.localizedDescription)" }
+        } catch { self.error = "无法保存设置：\(error.localizedDescription)" }
     }
 }
 

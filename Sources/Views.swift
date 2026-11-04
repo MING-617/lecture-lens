@@ -26,6 +26,14 @@ struct LensView: View {
                     Button { model.error = nil } label: { Image(systemName: "xmark") }.buttonStyle(.plain)
                 }.padding(14).background(Color.orange.opacity(0.09))
             }
+            if let notice = model.notice {
+                HStack(alignment: .top) {
+                    Image(systemName: "info.circle").foregroundStyle(accent)
+                    Text(notice).font(.callout).textSelection(.enabled)
+                    Spacer()
+                    Button { model.notice = nil } label: { Image(systemName: "xmark") }.buttonStyle(.plain)
+                }.padding(14).background(accent.opacity(0.07))
+            }
             captions
             if !suggestions.isEmpty { hints(suggestions) }
             Divider()
@@ -40,7 +48,7 @@ struct LensView: View {
         .sheet(isPresented: $model.showHelp, onDismiss: model.presentPendingStop) {
             VStack(alignment: .leading, spacing: 18) {
                 Text("使用 Lecture Lens").font(.title2.bold())
-                Text("1. 直接点击“开始”，无需选择课程或章节。\n2. 英文逐步出现，文字仍可能修正；专业词增强自动使用词表，中文开关只控制解释。\n3. 软件自动识别已有课程词表中的专业词，结合上下文显示中文提示；不确定的词义先不提示。\n4. “回看”只暂停画面；“回到实时”可追赶。\n5. “悬浮字幕”切换小窗口并置顶，不停止收音；“返回主界面”恢复原窗口。\n6. 点击术语旁的 ⓘ 看解释、来源与页码；“术语表”可搜索词条。\n7. 点击“停止”后，再点击“确认停止”；按回车默认继续听课。")
+                Text("1. 直接点击“开始”，无需选择课程或章节。\n2. 英文逐步出现，文字仍可能修正；专业词增强自动使用词表，中文开关只控制解释。\n3. 软件自动识别已有课程词表中的专业词，结合上下文显示中文提示；不确定的词义先不提示。\n4. “回看”只暂停画面；“回到实时”可追赶。\n5. “悬浮字幕”切换小窗口并置顶，不停止收音；“返回主界面”恢复原窗口。\n6. 点击术语旁的 ⓘ 看解释、来源与页码；“术语表”可搜索词条。\n7. 点击“停止”后，再点击“确认停止”；按回车默认继续听课。\n8. 上课期间屏幕保持常亮；麦克风设备变化时自动恢复收音，继续写入同一份字幕。")
                     .lineSpacing(8)
                 Text("字幕采用持续流式识别，最新词逐步补齐，前面的词不会等待长句最终校正。延迟根据模型词片时间戳估计，界面不截断超时读数。目标是持续跟上、控制在 2–3 秒以内；准确率和教室收音仍需现场检查。")
                     .font(.callout).foregroundStyle(.secondary)
@@ -92,8 +100,8 @@ struct LensView: View {
                     .font(.caption).foregroundStyle(Color(nsColor: .systemGreen)).lineLimit(2).frame(maxWidth: .infinity, alignment: .leading)
             }
             HStack {
-                Text(model.error ?? model.enhancementNotice ?? model.status).lineLimit(2)
-                    .foregroundStyle(model.error != nil || model.enhancementNotice != nil || model.stalled ? Color.orange : Color.secondary)
+                Text(model.error ?? model.notice ?? model.enhancementNotice ?? model.status).lineLimit(2)
+                    .foregroundStyle(model.error != nil || model.notice != nil || model.enhancementNotice != nil || model.stalled ? Color.orange : Color.secondary)
                 Spacer()
                 if let delay = model.latency { Text(String(format: "≈ %.1f 秒", delay)).foregroundStyle(delay > 3 ? Color.orange : Color.secondary) }
             }.font(.caption)
@@ -240,6 +248,7 @@ struct GlossaryView: View {
     @State private var source = ""
     @State private var search = ""
     @State private var detailTerm: Term?
+    @State private var importResult: String?
     private var filtered: [Term] {
         model.terms.filter { search.isEmpty || ($0.english + " " + $0.chinese + " " + model.courseTitle($0.course)).localizedCaseInsensitiveContains(search) }
             .sorted { $0.english.localizedCaseInsensitiveCompare($1.english) == .orderedAscending }
@@ -260,12 +269,13 @@ struct GlossaryView: View {
                     model.addTerm(english: english, chinese: chinese, explanation: explanation, course: termCourse.isEmpty ? "General" : termCourse, source: source)
                     english = ""; chinese = ""; explanation = ""
                 }.disabled(english.trimmingCharacters(in: .whitespaces).isEmpty || chinese.trimmingCharacters(in: .whitespaces).isEmpty)
-                Button("导入 TSV…") { model.importTerms() }
+                Button("导入 TSV…") { importResult = model.importTerms() }
                 Spacer()
                 Button("恢复已掌握提示") { model.forgetKnown() }.disabled(model.known.isEmpty)
             }
-            Text("TSV：英文 ⇥ 中文 ⇥ 解释 ⇥ 课程 ⇥ 出处；后三项可选。⇥ 表示 Tab 键。")
+            Text("TSV：英文 ⇥ 中文 ⇥ 解释 ⇥ 课程 ⇥ 出处；后三项可选，中文留空的行会跳过。⇥ 表示 Tab 键。新课件的候选词可用 Scripts/extract-terms.py 生成。")
                 .font(.caption).foregroundStyle(.secondary)
+            if let importResult { Text(importResult).font(.caption).foregroundStyle(accent) }
             if filtered.isEmpty {
                 VStack(spacing: 9) {
                     Text("没有匹配的词条").font(.headline)

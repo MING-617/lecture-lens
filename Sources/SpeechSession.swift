@@ -6,6 +6,9 @@ import AudioToolbox
 struct InputDevice: Identifiable, Hashable {
     let id: AudioDeviceID
     let name: String
+    /// Stays the same across reconnects and restarts, unlike `id`, so the
+    /// chosen microphone can be remembered.
+    let uid: String
     static func recommended() -> AudioDeviceID {
         for device in list() {
             var address = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyTransportType, mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
@@ -23,12 +26,16 @@ struct InputDevice: Identifiable, Hashable {
         return devices.compactMap { id in
             var input = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyStreams, mScope: kAudioObjectPropertyScopeInput, mElement: kAudioObjectPropertyElementMain)
             var inputSize: UInt32 = 0
-            guard AudioObjectGetPropertyDataSize(id, &input, 0, nil, &inputSize) == noErr, inputSize > 0 else { return nil }
-            var property = AudioObjectPropertyAddress(mSelector: kAudioObjectPropertyName, mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
-            var name: Unmanaged<CFString>?, nameSize = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
-            guard AudioObjectGetPropertyData(id, &property, 0, nil, &nameSize, &name) == noErr, let name else { return nil }
-            return InputDevice(id: id, name: name.takeRetainedValue() as String)
+            guard AudioObjectGetPropertyDataSize(id, &input, 0, nil, &inputSize) == noErr, inputSize > 0,
+                  let name = text(of: id, kAudioObjectPropertyName) else { return nil }
+            return InputDevice(id: id, name: name, uid: text(of: id, kAudioDevicePropertyDeviceUID) ?? "id-\(id)")
         }
+    }
+    private static func text(of id: AudioObjectID, _ selector: AudioObjectPropertySelector) -> String? {
+        var property = AudioObjectPropertyAddress(mSelector: selector, mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
+        var value: Unmanaged<CFString>?, size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
+        guard AudioObjectGetPropertyData(id, &property, 0, nil, &size, &value) == noErr, let value else { return nil }
+        return value.takeRetainedValue() as String
     }
 }
 
@@ -81,7 +88,9 @@ extension AVAudioPCMBuffer {
 final class AudioFeeder: @unchecked Sendable {
     let queue: DispatchQueue
     private let schedulingClass: DispatchQoS.QoSClass
-    private let converter: AVAudioConverter
+    // Worker queue only. Replaced when a reopened microphone delivers a
+    // different format.
+    private var converter: AVAudioConverter
     private let format: AVAudioFormat
     private let decoder: StreamingDecoder
     private let voice: VoiceActivity
@@ -100,6 +109,9 @@ final class AudioFeeder: @unchecked Sendable {
     private var pendingChange: Int?
     private var update: AudioUpdate?
     private var reportedEnd = 0.0
+    // Worker queue only. After the microphone reopens, look for the missing
+    // interval until this many samples have been processed.
+    private var resyncLimit: Int64?
     let onAudio: @Sendable (AudioUpdate) -> Void
     let onResult: @Sendable (RecognitionEvent) -> Void
     let onError: @Sendable (Error) -> Void
@@ -122,8 +134,12 @@ final class AudioFeeder: @unchecked Sendable {
     /// Audio captured while the model was loading, oldest first. It is
     /// processed ahead of live audio at a higher priority to catch up, and
     /// does not count toward the live backlog limit.
-    func preload(_ buffers: [(buffer: AVAudioPCMBuffer, uptime: Double)]) {
-        for item in buffers { schedule(item.buffer, at: item.uptime, backlog: true) }
+    func preload(_ buffer: AVAudioPCMBuffer, at uptime: Double) { schedule(buffer, at: uptime, backlog: true) }
+    /// The microphone was reopened after a device change, so audio is missing
+    /// between the buffers before and after this call. Queued in order with them.
+    func resume() {
+        guard lock.withLock({ accepting }) else { return }
+        enqueue { [self] in resyncLimit = samples + 32000 }
     }
     private func schedule(_ buffer: AVAudioPCMBuffer, at uptime: Double, backlog: Bool) {
         let duration = Double(buffer.frameLength) / buffer.format.sampleRate
@@ -146,8 +162,13 @@ final class AudioFeeder: @unchecked Sendable {
             defer { release(duration, backlog: backlog) }
             guard !lock.withLock({ cancelled }) else { return }
             if originValue == nil { originValue = uptime }
+            if let limit = resyncLimit { fillGap(before: uptime, limit: limit) }
             let origin = originValue!
             let started = ProcessInfo.processInfo.systemUptime
+            if copy.format != converter.inputFormat {
+                guard let replacement = AVAudioConverter(from: copy.format, to: format) else { onError(SessionError.format); return }
+                converter = replacement
+            }
             let capacity = AVAudioFrameCount(ceil(Double(copy.frameLength) * format.sampleRate / copy.format.sampleRate) + 64)
             guard let output = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: capacity) else { return }
             var provided = false, error: NSError?
@@ -176,6 +197,21 @@ final class AudioFeeder: @unchecked Sendable {
             update = next
             if end >= reportedEnd + 0.25 { flushUpdate() }
         }
+    }
+    /// Feed the interval lost while the microphone reopened as silence, so
+    /// word times keep matching the clock and the model hears a pause rather
+    /// than two halves of speech joined together. A long gap becomes two
+    /// seconds of silence; the origin absorbs the rest, keeping delays honest.
+    private func fillGap(before uptime: Double, limit: Int64) {
+        guard let origin = originValue else { return }
+        let gap = uptime - (origin + Double(samples) / 16000)
+        // Buffers still in flight from the old input arrive without a gap.
+        guard gap > 0.05 else { if samples >= limit { resyncLimit = nil }; return }
+        resyncLimit = nil
+        let count = Int(min(gap, 2) * 16000)
+        samples += Int64(count)
+        originValue = origin + gap - Double(count) / 16000
+        if decoder.feed([Float](repeating: 0, count: count)) { publish(final: false, origin: originValue!, end: Double(samples) / 16000) }
     }
     private func flushUpdate() {
         guard let update else { return }
@@ -232,8 +268,10 @@ final class AudioFeeder: @unchecked Sendable {
 final class StartupAudio: @unchecked Sendable {
     static let limit = 6.0
     private let lock = NSLock()
-    private var held: [(buffer: AVAudioPCMBuffer, uptime: Double)] = []
+    // `resume` marks the first buffer after the microphone reopened.
+    private var held: [(buffer: AVAudioPCMBuffer, uptime: Double, resume: Bool)] = []
     private var heldSeconds = 0.0
+    private var resumeNext = false
     private var feeder: AudioFeeder?
 
     func accept(_ buffer: AVAudioPCMBuffer, at uptime: Double) {
@@ -241,14 +279,26 @@ final class StartupAudio: @unchecked Sendable {
         if let feeder { lock.unlock(); feeder.submit(buffer, at: uptime); return }
         defer { lock.unlock() }
         guard let copy = buffer.copied() else { return }
-        held.append((copy, uptime)); heldSeconds += Double(copy.frameLength) / copy.format.sampleRate
+        held.append((copy, uptime, resumeNext)); resumeNext = false
+        heldSeconds += Double(copy.frameLength) / copy.format.sampleRate
         // An unusually slow start keeps only the most recent seconds.
         while heldSeconds > Self.limit, let first = held.first {
             heldSeconds -= Double(first.buffer.frameLength) / first.buffer.format.sampleRate; held.removeFirst()
         }
     }
+    /// The microphone reopened; audio is missing before the next buffer.
+    func resume() {
+        lock.withLock { if let feeder { feeder.resume() } else { resumeNext = true } }
+    }
     func attach(_ worker: AudioFeeder) {
-        lock.withLock { worker.preload(held); held = []; heldSeconds = 0; feeder = worker }
+        lock.withLock {
+            for item in held {
+                if item.resume { worker.resume() }
+                worker.preload(item.buffer, at: item.uptime)
+            }
+            if resumeNext { worker.resume(); resumeNext = false }
+            held = []; heldSeconds = 0; feeder = worker
+        }
     }
 }
 
@@ -258,6 +308,9 @@ final class StartupAudio: @unchecked Sendable {
     private var configObserver: NSObjectProtocol?
     private var capturing = false
     private var tapInstalled = false
+    private var startup: StartupAudio?
+    private var requestedDevice: AudioDeviceID = 0
+    private var reopened: [Double] = []
     var modelDirectory: URL?
     var onResult: ((RecognitionEvent) -> Void)?
     var onLevel: ((Double, Double, Double) -> Void)?
@@ -266,6 +319,8 @@ final class StartupAudio: @unchecked Sendable {
     var onPerformance: ((Double, Double) -> Void)?
     var onVoice: ((Bool) -> Void)?
     var onEnhancement: ((Bool, String?) -> Void)?
+    /// The microphone reopened after a device change and listening continues.
+    var onRecovery: ((String) -> Void)?
     var enhancementPaths = 2
     var enhancementScore: Float = 1
     // Two threads on the energy-conscious queue passed paced comparisons.
@@ -326,6 +381,16 @@ final class StartupAudio: @unchecked Sendable {
     func startMicrophone(device: AudioDeviceID, contextualTerms: [String]) async throws {
         let granted = await AVCaptureDevice.requestAccess(for: .audio)
         guard granted else { throw SessionError.microphone }; try Task.checkCancellation()
+        // Listen before the model is ready; loading takes a few seconds and
+        // the teacher may already be speaking.
+        let startup = StartupAudio(); self.startup = startup
+        requestedDevice = device; reopened = []
+        let format = try openInput(device: device, into: startup)
+        try await prepare(inputFormat: format, contextualTerms: contextualTerms); try Task.checkCancellation()
+        guard let feeder else { throw SessionError.format }
+        startup.attach(feeder)
+    }
+    private func openInput(device: AudioDeviceID, into startup: StartupAudio) throws -> AVAudioFormat {
         let engine = AVAudioEngine(); self.engine = engine
         let input = engine.inputNode
         if device != 0, let unit = input.audioUnit {
@@ -334,9 +399,6 @@ final class StartupAudio: @unchecked Sendable {
         }
         let format = input.outputFormat(forBus: 0)
         guard format.channelCount > 0, format.sampleRate > 0 else { throw SessionError.device }
-        // Listen before the model is ready; loading takes a few seconds and
-        // the teacher may already be speaking.
-        let startup = StartupAudio()
         input.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, time in
             let uptime = time.isHostTimeValid ? AVAudioTime.seconds(forHostTime: time.hostTime) : ProcessInfo.processInfo.systemUptime - Double(buffer.frameLength) / format.sampleRate
             startup.accept(buffer, at: uptime)
@@ -344,11 +406,33 @@ final class StartupAudio: @unchecked Sendable {
         tapInstalled = true
         engine.prepare(); try engine.start(); capturing = true
         configObserver = NotificationCenter.default.addObserver(forName: .AVAudioEngineConfigurationChange, object: engine, queue: .main) { [weak self] _ in
-            Task { @MainActor in if let self, self.capturing { self.onError?(SessionError.interrupted) } }
+            Task { @MainActor in self?.configurationChanged() }
         }
-        try await prepare(inputFormat: format, contextualTerms: contextualTerms); try Task.checkCancellation()
-        guard let feeder else { throw SessionError.format }
-        startup.attach(feeder)
+        return format
+    }
+    /// A device change stops the engine. Reopen the microphone and keep the
+    /// same recognizer and transcript, rather than ending the lecture.
+    private func configurationChanged() {
+        guard capturing, let startup else { return }
+        let now = ProcessInfo.processInfo.systemUptime
+        reopened = reopened.filter { now - $0 < 60 }
+        // Repeated changes suggest an unstable device: stop and keep the transcript.
+        guard reopened.count < 3 else { onError?(SessionError.interrupted); return }
+        reopened.append(now)
+        endCapture()
+        var fallback = false
+        do {
+            do { _ = try openInput(device: requestedDevice, into: startup) } catch {
+                guard requestedDevice != 0 else { throw error }
+                // The chosen microphone was unplugged; continue on the default.
+                endCapture(); fallback = true
+                _ = try openInput(device: 0, into: startup)
+            }
+        } catch {
+            endCapture(); onError?(SessionError.interrupted); return
+        }
+        startup.resume()
+        onRecovery?(fallback ? "所选麦克风已不可用，已改用系统默认麦克风继续收音。" : "麦克风设备发生变化，已自动恢复收音。")
     }
     func streamFile(url: URL, contextualTerms: [String], repetitions: Int = 1, maximumDuration: Double? = nil) async throws {
         let file = try AVAudioFile(forReading: url)

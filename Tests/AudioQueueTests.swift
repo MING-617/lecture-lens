@@ -77,5 +77,27 @@ final class AudioCount: @unchecked Sendable {
         assert(earlyFailures.value == 0 && abs(early.seconds - 7.2) < 0.001,
                "startup audio (6 s kept) and 1.2 s of live audio must all be processed, got \(early.seconds)")
         print("PASS: audio captured during model loading (most recent 6 s) is processed before live audio without backlog errors")
+        // A device change reopens the microphone: the missing half second is
+        // fed as silence, and a new input format gets its own converter.
+        let wide = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 48000, channels: 1, interleaved: false)!
+        let wideBuffer = AVAudioPCMBuffer(pcmFormat: wide, frameCapacity: 4800)!
+        wideBuffer.frameLength = 4800
+        memset(wideBuffer.floatChannelData![0], 0, 4800 * MemoryLayout<Float>.size)
+        for viaStartup in [false, true] {
+            let resumed = AudioCount(), resumedFailures = FailureCount()
+            let worker = try AudioFeeder(input: format, model: URL(fileURLWithPath: CommandLine.arguments[1]),
+                                         onAudio: { resumed.accept($0.end) }, onResult: { _ in },
+                                         onError: { _ in resumedFailures.add() })
+            let base = ProcessInfo.processInfo.systemUptime, startup = StartupAudio()
+            func send(_ item: AVAudioPCMBuffer, at uptime: Double) { if viaStartup { startup.accept(item, at: uptime) } else { worker.submit(item, at: uptime) } }
+            for i in 0..<5 { send(buffer, at: base + Double(i) * 0.1) }
+            if viaStartup { startup.resume() } else { worker.resume() }
+            for i in 0..<5 { send(wideBuffer, at: base + 1.0 + Double(i) * 0.1) }
+            if viaStartup { startup.attach(worker) }
+            await worker.finish()
+            assert(resumedFailures.value == 0 && abs(resumed.seconds - 1.5) < 0.05,
+                   "0.5 s before, a 0.5 s gap and 0.5 s at 48 kHz must make 1.5 s of stream time, got \(resumed.seconds)")
+        }
+        print("PASS: a reopened microphone fills its gap with silence and switches format, for live and startup audio")
     }
 }

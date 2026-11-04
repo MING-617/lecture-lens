@@ -20,4 +20,5 @@ xcrun swiftc "${task_flags[@]}" "$task_root/Sources/Core.swift" "$task_root/Sour
 xcrun swiftc "${task_flags[@]}" "${task_link[@]}" "${task_native[@]}" "$task_root/Tests/EnhancementTests.swift" -o "$task_results/enhancement-tests"
 "$task_results/enhancement-tests" "$task_root/Resources/StreamingEnglish" "$task_results/fallback-model"
 python3 "$task_root/Tests/VocabularyMetricsTests.py"
+python3 "$task_root/Tests/ExtractTermsTests.py"
 print "Tests passed. Local results: $task_results"
