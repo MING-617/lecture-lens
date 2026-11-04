@@ -162,7 +162,7 @@ import CoreAudio
     /// since captions are read, not touched. Closing the lid still sleeps,
     /// which stops the session as before.
     private func keepAwake(_ session: Bool) {
-        let wanted = session ? keepScreenOn : nil
+        let wanted: Bool? = session ? keepScreenOn : nil
         guard awake?.screen != wanted else { return }
         if let awake { ProcessInfo.processInfo.endActivity(awake.token); self.awake = nil }
         guard let screen = wanted else { return }
